@@ -39,17 +39,31 @@ export function update(known, score, p) {
   return posterior + (1 - posterior) * p.learn;
 }
 
+/** A skill that has never been asked about: the starting belief and the first half-life. */
+export const fresh = (p = DEFAULTS) => ({ known: p.init, halfLife: FIRST_HALF_LIFE });
+
+/**
+ * One answer. The belief first fades for the days since the last answer, then is updated on
+ * the score (1 right, 0 wrong, anything between is partial), and the half-life doubles after
+ * a fully right answer and halves after a fully wrong one.
+ */
+export function step(state, score, days, p = DEFAULTS) {
+  const faded = decay(state.known, state.halfLife, days);
+  return {
+    known: update(Math.max(faded, 0.001), score, p),
+    halfLife: Math.min(180, Math.max(1, state.halfLife * (score === 1 ? 2 : score === 0 ? 0.5 : 1))),
+  };
+}
+
 /** Runs every answer through the model, oldest first, and returns each skill as it stands at `now`. */
 export function trace(answers, now, p = DEFAULTS) {
   const skills = new Map();
   for (const a of [...answers].sort((x, y) => x.when.localeCompare(y.when))) {
     const name = canon(a.skill);
     if (!name || !(a.verdict in SCORE)) continue;
-    const s = skills.get(name) ?? { skill: name, known: p.init, halfLife: FIRST_HALF_LIFE, last: a.when, answers: 0, missed: 0 };
-    const faded = decay(s.known, s.halfLife, (Date.parse(a.when) - Date.parse(s.last)) / DAY);
+    const s = skills.get(name) ?? { skill: name, ...fresh(p), last: a.when, answers: 0, missed: 0 };
     const score = SCORE[a.verdict];
-    s.known = update(Math.max(faded, 0.001), score, p);
-    s.halfLife = Math.min(180, Math.max(1, s.halfLife * (score === 1 ? 2 : score === 0 ? 0.5 : 1)));
+    Object.assign(s, step(s, score, (Date.parse(a.when) - Date.parse(s.last)) / DAY, p));
     s.last = a.when;
     s.answers += 1;
     if (score === 0) s.missed += 1;

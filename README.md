@@ -80,7 +80,8 @@ What this shows, and does not:
   -0.0057 to -0.0012). It is the same model, so this is a check that the implementation is right.
 - The default settings are poor: their probabilities are worse than the per-skill average (log
   loss 0.670 against 0.626). Fit the model on your own data before trusting its numbers.
-- The forgetting curve is not tested. This dataset has no usable times between answers.
+- The forgetting curve is not tested by this dataset, which has no usable times between
+  answers. It is tested separately, below.
 - pyBKT was run with one starting point, not its default five, to keep the run short.
 - Before the repeated rows were removed, every model scored about 0.08 higher
   (`bench/results_uncleaned.json`). Those figures are inflated and should not be quoted.
@@ -93,6 +94,43 @@ node bench/ktrace_run.mjs
 uv run --python 3.11 --with pybkt --with "numpy<2" --with "pandas<2.3" --with "scikit-learn<1.5" bench/pybkt_run.py --seed 42
 uv run --with pandas --with numpy bench/score.py --seed 42
 ```
+
+### Forgetting
+
+The forgetting rule was tested on Duolingo's public review data (Settles & Meeder, 2016), which
+records the time since each word was last practised, against Duolingo's own published code. The
+first 3,000,000 reviews were used: the first 90% to learn from, and the last 300,000 (6,597
+learners) scored. MAE is the average gap between predicted and actual recall, lower is better;
+AUC is how well risky reviews are ranked below safe ones, where 0.5 is chance.
+
+| Model | MAE (95% interval) | AUC (95% interval) |
+|---|---|---|
+| Always predict the average recall | 0.175 (0.172 to 0.178) | 0.500 |
+| ktrace as shipped | 0.528 (0.521 to 0.535) | 0.547 (0.540 to 0.555) |
+| ktrace, earlier answers replayed | 0.250 (0.246 to 0.254) | 0.566 (0.559 to 0.572) |
+| ktrace, replayed and four numbers fitted | 0.193 (0.190 to 0.197) | 0.566 (0.559 to 0.573) |
+| Pimsleur | 0.437 (0.428 to 0.446) | 0.518 (0.510 to 0.527) |
+| Leitner | 0.228 (0.222 to 0.234) | 0.546 (0.538 to 0.553) |
+| Logistic regression | 0.216 (0.212 to 0.219) | 0.496 (0.487 to 0.505) |
+| Half-life regression (Duolingo) | 0.125 (0.121 to 0.129) | 0.538 (0.531 to 0.547) |
+
+What this shows:
+
+- **As shipped, the forgetting rule is badly wrong on this data.** It is the worst model in the
+  table on MAE, worse than predicting the average. Learners recalled about 90% of words; the
+  model, starting from a three-day half-life and a low starting belief, expected far less.
+- **It ranks well.** With earlier answers replayed, its AUC is the highest in the table, above
+  half-life regression. It knows which reviews are riskier; its probabilities are too low.
+- **Even fitted, it does not beat the average on MAE.** The four tracing numbers were fitted,
+  but the forgetting rule (first half-life, doubling and halving) was left as shipped, since it
+  was the thing under test. Fitting that rule on training data is the obvious next step.
+- The reference numbers match the paper's (for example half-life regression at about 0.128
+  MAE and 0.538 AUC), which is a check that the setup is right.
+- Only the first 3,000,000 of 12.9 million reviews were used, to fit in memory and time.
+
+To reproduce: `sh bench/duo_reference.sh`, then
+`gunzip -c bench/data/duo/traces.csv.gz | head -n 3000001 | node bench/duo_ktrace.mjs`, then
+`uv run --with pandas --with numpy bench/duo_score.py --seed 42`. The data is licensed CC BY-NC 4.0.
 
 ## Honest limits
 

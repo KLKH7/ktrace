@@ -1,0 +1,122 @@
+{
+  "date": "2026-11-21",
+  "git": "5d5d0dc",
+  "seed": 42,
+  "data": "Duolingo learning traces (Settles & Meeder 2016), first 3,000,000 reviews, last 10% scored",
+  "scored_reviews": 300000,
+  "scored_learners": 6597,
+  "share_fully_recalled": 0.8434,
+  "ktrace_params": {
+    "defaults": {
+      "init": 0.3,
+      "learn": 0.15,
+      "slip": 0.1,
+      "guess": 0.1
+    },
+    "fitted": {
+      "init": 0.8,
+      "learn": 0.5,
+      "slip": 0.05,
+      "guess": 0.3
+    },
+    "trainAverageRecall": 0.8959309353882181
+  },
+  "results": {
+    "constant": {
+      "mae": {
+        "value": 0.1749,
+        "low": 0.1717,
+        "high": 0.1778
+      },
+      "auc": {
+        "value": 0.5,
+        "low": 0.5,
+        "high": 0.5
+      }
+    },
+    "ktrace_shipped": {
+      "mae": {
+        "value": 0.5279,
+        "low": 0.5208,
+        "high": 0.5352
+      },
+      "auc": {
+        "value": 0.5473,
+        "low": 0.5403,
+        "high": 0.5553
+      }
+    },
+    "ktrace_history": {
+      "mae": {
+        "value": 0.2497,
+        "low": 0.2459,
+        "high": 0.2537
+      },
+      "auc": {
+        "value": 0.5658,
+        "low": 0.5591,
+        "high": 0.5724
+      }
+    },
+    "ktrace_fit": {
+      "mae": {
+        "value": 0.1933,
+        "low": 0.1897,
+        "high": 0.1973
+      },
+      "auc": {
+        "value": 0.5663,
+        "low": 0.5592,
+        "high": 0.573
+      }
+    },
+    "pimsleur": {
+      "mae": {
+        "value": 0.437,
+        "low": 0.4278,
+        "high": 0.4455
+      },
+      "auc": {
+        "value": 0.5184,
+        "low": 0.5097,
+        "high": 0.527
+      }
+    },
+    "leitner": {
+      "mae": {
+        "value": 0.2279,
+        "low": 0.2223,
+        "high": 0.2339
+      },
+      "auc": {
+        "value": 0.5456,
+        "low": 0.5382,
+        "high": 0.5532
+      }
+    },
+    "lr": {
+      "mae": {
+        "value": 0.2156,
+        "low": 0.2122,
+        "high": 0.2188
+      },
+      "auc": {
+        "value": 0.4958,
+        "low": 0.4865,
+        "high": 0.5046
+      }
+    },
+    "hlr": {
+      "mae": {
+        "value": 0.1248,
+        "low": 0.1209,
+        "high": 0.1289
+      },
+      "auc": {
+        "value": 0.5384,
+        "low": 0.5311,
+        "high": 0.5472
+      }
+    }
+  }
+}
