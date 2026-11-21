@@ -1,0 +1,13 @@
+export type Verdict = "explained" | "partial" | "missed";
+export type Answer = { when: string; skill: string; verdict: Verdict; track?: string; conversation?: string };
+export type Params = { init: number; learn: number; slip: number; guess: number };
+export type Skill = { skill: string; known: number; halfLife: number; last: string; answers: number; missed: number };
+export const DEFAULTS: Params;
+export const MIN_TO_FIT: number;
+export function canon(skill: string): string;
+export function decay(known: number, halfLife: number, days: number): number;
+export function update(known: number, score: number, p: Params): number;
+export function trace(answers: Answer[], now: Date, p?: Params): Skill[];
+export function weakest(skills: Skill[], n?: number): Skill[];
+export function logLikelihood(answers: Answer[], p: Params, sorted?: boolean): number;
+export function fit(answers: Answer[], min?: number): Params | null;

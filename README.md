@@ -76,6 +76,13 @@ scheduling as tools), and [pyBKT](https://github.com/CAHLR/pyBKT) (the reference
 knowledge tracing). This project differs in running in the background as you build, in modelling
 explanation rather than recall, and in checking sources.
 
+## Use the model in your own code
+
+```js
+import { trace } from "ktrace-mcp/model";
+trace([{ when: "2026-11-20T10:00:00Z", skill: "debouncing", verdict: "missed" }], new Date());
+```
+
 ## Develop
 
 ```bash
