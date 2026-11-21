@@ -1,0 +1,13 @@
+{
+  "name": "learn-while-it-builds",
+  "version": "0.1.0",
+  "description": "An MCP server for Claude Code that keeps your understanding up with the build: it logs the ideas the agent uses, models what you can explain, and suggests what to read next, checked at the source.",
+  "type": "module",
+  "bin": { "learn-while-it-builds": "bin/cli.mjs" },
+  "files": ["bin", "src"],
+  "scripts": { "test": "node --test --test-timeout=30000 test/model.test.mjs test/verify.test.mjs test/server.test.mjs" },
+  "engines": { "node": ">=20" },
+  "license": "MIT",
+  "keywords": ["mcp", "claude-code", "learning", "knowledge-tracing", "spaced-repetition"],
+  "dependencies": { "@modelcontextprotocol/sdk": "^1.20.0", "zod": "^3.25.0" }
+}
