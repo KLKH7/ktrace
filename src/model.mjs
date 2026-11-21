@@ -28,8 +28,8 @@ export const canon = (skill) => skill.toLowerCase().replace(/[^a-z0-9]+/g, " ").
 /** What is left of `known` after `days` with this half-life. */
 export const decay = (known, halfLife, days) => known * 2 ** (-Math.max(0, days) / halfLife);
 
-/** The chance of an "explained" answer when the skill is known with probability `known`. */
-const expectRight = (known, p) => known * (1 - p.slip) + (1 - known) * p.guess;
+/** The chance of an "explained" answer when the skill is known with probability `known`: the model's prediction for the next answer. */
+export const expectRight = (known, p) => known * (1 - p.slip) + (1 - known) * p.guess;
 
 /** Bayes' rule on one answer, then the chance that the attempt taught it. A partial answer counts as half of each. */
 export function update(known, score, p) {
@@ -81,13 +81,28 @@ export function logLikelihood(answers, p, sorted = false) {
 /** The parameters that best explain the answers, searched over a grid. Null until there are MIN_TO_FIT answers. */
 export function fit(answers, min = MIN_TO_FIT) {
   if (answers.length < min) return null;
+  // each run of answers on one skill in one conversation, as plain numbers, so the search is fast
+  const runs = new Map();
+  for (const a of [...answers].sort((x, y) => x.when.localeCompare(y.when))) {
+    const key = `${a.conversation ?? ""}|${a.skill}`;
+    if (!runs.has(key)) runs.set(key, []);
+    runs.get(key).push(SCORE[a.verdict]);
+  }
+  const sequences = [...runs.values()];
   const steps = (from, to, by) => Array.from({ length: Math.round((to - from) / by) + 1 }, (_, i) => +(from + i * by).toFixed(2));
-  const inOrder = [...answers].sort((x, y) => x.when.localeCompare(y.when));
   let best = DEFAULTS;
   let bestScore = -Infinity;
   for (const init of steps(0.05, 0.8, 0.05)) for (const learn of steps(0.05, 0.5, 0.05)) for (const slip of steps(0.05, 0.3, 0.05)) for (const guess of steps(0.05, 0.3, 0.05)) {
     const p = { init, learn, slip, guess };
-    const score = logLikelihood(inOrder, p, true);
+    let score = 0;
+    for (const scores of sequences) {
+      let k = init;
+      for (const s of scores) {
+        const right = expectRight(k, p);
+        score += s * Math.log(right) + (1 - s) * Math.log(1 - right);
+        k = update(k, s, p);
+      }
+    }
     if (score > bestScore) [best, bestScore] = [p, score];
   }
   return best;

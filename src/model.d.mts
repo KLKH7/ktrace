@@ -6,6 +6,7 @@ export const DEFAULTS: Params;
 export const MIN_TO_FIT: number;
 export function canon(skill: string): string;
 export function decay(known: number, halfLife: number, days: number): number;
+export function expectRight(known: number, p: Params): number;
 export function update(known: number, score: number, p: Params): number;
 export function trace(answers: Answer[], now: Date, p?: Params): Skill[];
 export function weakest(skills: Skill[], n?: number): Skill[];

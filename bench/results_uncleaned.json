@@ -1,0 +1,136 @@
+{
+  "date": "2026-11-21",
+  "git": "a5c3605",
+  "seed": 42,
+  "data": "ASSISTments 2009-2010 skill builder (as.csv from pyBKT-examples)",
+  "test_answers": 93104,
+  "test_students": 846,
+  "ktrace_params": {
+    "defaults": {
+      "init": 0.3,
+      "learn": 0.15,
+      "slip": 0.1,
+      "guess": 0.1
+    },
+    "fit": {
+      "init": 0.7,
+      "learn": 0.05,
+      "slip": 0.15,
+      "guess": 0.2
+    },
+    "skillsFittedSeparately": 91,
+    "skillsInTraining": 110
+  },
+  "not_run": [
+    "pybkt_forgets"
+  ],
+  "results": {
+    "base_overall": {
+      "auc": {
+        "value": 0.5,
+        "low": 0.5,
+        "high": 0.5
+      },
+      "log_loss": {
+        "value": 0.6262,
+        "low": 0.6021,
+        "high": 0.6535
+      },
+      "rmse": {
+        "value": 0.4661,
+        "low": 0.4537,
+        "high": 0.4797
+      }
+    },
+    "base_skill": {
+      "auc": {
+        "value": 0.6611,
+        "low": 0.6297,
+        "high": 0.6907
+      },
+      "log_loss": {
+        "value": 0.5914,
+        "low": 0.5582,
+        "high": 0.6272
+      },
+      "rmse": {
+        "value": 0.45,
+        "low": 0.4344,
+        "high": 0.4668
+      }
+    },
+    "ktrace_defaults": {
+      "auc": {
+        "value": 0.7793,
+        "low": 0.7433,
+        "high": 0.8096
+      },
+      "log_loss": {
+        "value": 0.545,
+        "low": 0.5051,
+        "high": 0.5885
+      },
+      "rmse": {
+        "value": 0.4211,
+        "low": 0.4022,
+        "high": 0.4405
+      }
+    },
+    "ktrace_fit": {
+      "auc": {
+        "value": 0.8024,
+        "low": 0.7646,
+        "high": 0.8356
+      },
+      "log_loss": {
+        "value": 0.5055,
+        "low": 0.4742,
+        "high": 0.5388
+      },
+      "rmse": {
+        "value": 0.4053,
+        "low": 0.3886,
+        "high": 0.422
+      }
+    },
+    "ktrace_per_skill": {
+      "auc": {
+        "value": 0.819,
+        "low": 0.7832,
+        "high": 0.8506
+      },
+      "log_loss": {
+        "value": 0.4721,
+        "low": 0.4315,
+        "high": 0.5162
+      },
+      "rmse": {
+        "value": 0.393,
+        "low": 0.3736,
+        "high": 0.4131
+      }
+    },
+    "pybkt": {
+      "auc": {
+        "value": 0.7955,
+        "low": 0.7666,
+        "high": 0.8239
+      },
+      "log_loss": {
+        "value": 0.49,
+        "low": 0.4512,
+        "high": 0.532
+      },
+      "rmse": {
+        "value": 0.4024,
+        "low": 0.3848,
+        "high": 0.4204
+      }
+    }
+  },
+  "auc_gap_ktrace_per_skill_minus_pybkt": {
+    "value": 0.0235,
+    "low": 0.0111,
+    "high": 0.0358
+  }
+}
