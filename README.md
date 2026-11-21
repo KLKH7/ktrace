@@ -58,10 +58,46 @@ Plain files in `~/.ktrace` on your machine: your answers, the ideas the agent
 noted, and the reading list. Nothing is uploaded. The only network use is checking a suggested
 source at arXiv, YouTube or its own page. There is no account and no telemetry.
 
+## How it compares
+
+The model was benchmarked against [pyBKT](https://github.com/CAHLR/pyBKT), the reference library
+for this kind of model, on the public ASSISTments 2009-2010 dataset (325,637 answers after
+removing 121,207 repeated rows). Every model predicted the same 66,547 answers from 846 students
+it had never seen: before each answer, the chance the student gets it right.
+
+| Model | Correct calls | AUC (95% interval) | Log loss |
+|---|---|---|---|
+| Each skill's average | 65.5% | 0.626 (0.616 to 0.637) | 0.626 |
+| ktrace, default settings | 67.3% | 0.665 (0.646 to 0.684) | 0.670 |
+| ktrace, one fit for all skills | 70.0% | 0.685 (0.668 to 0.703) | 0.594 |
+| ktrace, fitted per skill | 70.8% | 0.714 (0.699 to 0.730) | 0.577 |
+| pyBKT | 70.7% | 0.718 (0.703 to 0.733) | 0.576 |
+| pyBKT with forgetting | 70.8% | 0.721 (0.709 to 0.734) | 0.574 |
+
+What this shows, and does not:
+
+- Fitted per skill, ktrace is within half a point of the reference (AUC gap -0.0035, interval
+  -0.0057 to -0.0012). It is the same model, so this is a check that the implementation is right.
+- The default settings are poor: their probabilities are worse than the per-skill average (log
+  loss 0.670 against 0.626). Fit the model on your own data before trusting its numbers.
+- The forgetting curve is not tested. This dataset has no usable times between answers.
+- pyBKT was run with one starting point, not its default five, to keep the run short.
+- Before the repeated rows were removed, every model scored about 0.08 higher
+  (`bench/results_uncleaned.json`). Those figures are inflated and should not be quoted.
+
+To reproduce (seed 42; results in `bench/results.json` with the commit they came from):
+
+```bash
+uv run --with pandas bench/prepare.py --seed 42
+node bench/ktrace_run.mjs
+uv run --python 3.11 --with pybkt --with "numpy<2" --with "pandas<2.3" --with "scikit-learn<1.5" bench/pybkt_run.py --seed 42
+uv run --with pandas --with numpy bench/score.py --seed 42
+```
+
 ## Honest limits
 
-- The model's four numbers are sensible defaults. It can fit them from data, but refuses to
-  until there are 200 answers.
+- The model's four numbers are guesses, and the benchmark above shows they are poor ones. It can
+  fit them from data, but refuses to until there are 200 answers.
 - Ideas are matched by name, so "WACC" and "cost of capital" count as two.
 - Whether the agent calls the tools is up to the agent. The server tells it when to, and never
   to interrupt work to teach.

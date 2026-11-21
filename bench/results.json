@@ -1,6 +1,6 @@
 {
   "date": "2026-11-21",
-  "git": "a5c3605",
+  "git": "5c8cc92",
   "seed": 42,
   "data": "ASSISTments 2009-2010 skill builder (as.csv from pyBKT-examples)",
   "test_answers": 66547,
@@ -21,9 +21,7 @@
     "skillsFittedSeparately": 86,
     "skillsInTraining": 110
   },
-  "not_run": [
-    "pybkt_forgets"
-  ],
+  "not_run": [],
   "results": {
     "base_overall": {
       "auc": {
@@ -125,6 +123,23 @@
         "value": 0.4419,
         "low": 0.4365,
         "high": 0.4479
+      }
+    },
+    "pybkt_forgets": {
+      "auc": {
+        "value": 0.7212,
+        "low": 0.7089,
+        "high": 0.7342
+      },
+      "log_loss": {
+        "value": 0.5744,
+        "low": 0.5641,
+        "high": 0.5857
+      },
+      "rmse": {
+        "value": 0.441,
+        "low": 0.4359,
+        "high": 0.4465
       }
     }
   },
