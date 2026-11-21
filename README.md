@@ -109,6 +109,8 @@ AUC is how well risky reviews are ranked below safe ones, where 0.5 is chance.
 | ktrace as shipped | 0.528 (0.521 to 0.535) | 0.547 (0.540 to 0.555) |
 | ktrace, earlier answers replayed | 0.250 (0.246 to 0.254) | 0.566 (0.559 to 0.572) |
 | ktrace, replayed and four numbers fitted | 0.193 (0.190 to 0.197) | 0.566 (0.559 to 0.573) |
+| ktrace, forgetting rule fitted as well | 0.154 (0.150 to 0.157) | 0.571 (0.562 to 0.578) |
+| ktrace, all seven numbers fitted together | 0.173 (0.170 to 0.176) | 0.584 (0.575 to 0.593) |
 | Pimsleur | 0.437 (0.428 to 0.446) | 0.518 (0.510 to 0.527) |
 | Leitner | 0.228 (0.222 to 0.234) | 0.546 (0.538 to 0.553) |
 | Logistic regression | 0.216 (0.212 to 0.219) | 0.496 (0.487 to 0.505) |
@@ -121,9 +123,21 @@ What this shows:
   model, starting from a three-day half-life and a low starting belief, expected far less.
 - **It ranks well.** With earlier answers replayed, its AUC is the highest in the table, above
   half-life regression. It knows which reviews are riskier; its probabilities are too low.
-- **Even fitted, it does not beat the average on MAE.** The four tracing numbers were fitted,
-  but the forgetting rule (first half-life, doubling and halving) was left as shipped, since it
-  was the thing under test. Fitting that rule on training data is the obvious next step.
+- **Fitting only the four tracing numbers is not enough.** With the forgetting rule left as
+  shipped (first half-life of three days, doubling, halving), it does not beat the average on MAE.
+- **Fitting the forgetting rule fixes the worst of it.** Its three numbers were fitted on the
+  2,700,000 training reviews by maximum likelihood and scored once on the held-out reviews. MAE
+  falls to 0.154, better than the average (0.175) and still worse than half-life regression
+  (0.125). The fit moved the first half-life from 3 days to about 23, the growth after a right
+  answer from 2 to 10, and the shrinkage after a wrong answer from 0.5 to 1 (none). The last two
+  stopped at the limits the search allowed, so their best values may lie beyond them.
+- **Fitting all seven together ranks best and predicts worse.** AUC rises to 0.584, the highest
+  in the table, but MAE is 0.173. The chance of learning from an attempt goes to almost zero and
+  the chance of a lucky guess to 0.76: the model is using "guess" as a floor on recall. That is
+  a sign this kind of model suits vocabulary review poorly, not a finding about guessing.
+- **The fitted values are loosely pinned down.** An earlier run with a stricter stopping rule
+  put the first half-life at the 365-day limit with almost the same likelihood. They come from
+  vocabulary flashcards and are not shipped as defaults.
 - The reference numbers match the paper's (for example half-life regression at about 0.128
   MAE and 0.538 AUC), which is a check that the setup is right.
 - Only the first 3,000,000 of 12.9 million reviews were used, to fit in memory and time.
@@ -134,7 +148,8 @@ To reproduce: `sh bench/duo_reference.sh`, then
 
 ## Honest limits
 
-- The model's four numbers are guesses, and the benchmark above shows they are poor ones. It can
+- The model's numbers are guesses, and the benchmarks above show they are poor ones: the
+  shipped three-day first half-life forgets about eight times too fast on Duolingo's data. It can
   fit them from data, but refuses to until there are 200 answers.
 - Ideas are matched by name, so "WACC" and "cost of capital" count as two.
 - Whether the agent calls the tools is up to the agent. The server tells it when to, and never

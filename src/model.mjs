@@ -17,8 +17,10 @@
 
 // Speaking an explanation is hard to fake, so the chance of a lucky "explained" is low.
 export const DEFAULTS = { init: 0.3, learn: 0.15, slip: 0.1, guess: 0.1 };
+// The forgetting rule's three numbers: the first half-life in days, and what a fully right or
+// fully wrong answer multiplies it by. Parameters may carry their own (first, grow, shrink).
+export const FORGETTING = { first: 3, grow: 2, shrink: 0.5 };
 export const MIN_TO_FIT = 200;
-const FIRST_HALF_LIFE = 3; // days
 const DAY = 86_400_000;
 const SCORE = { explained: 1, partial: 0.5, missed: 0 };
 
@@ -40,18 +42,18 @@ export function update(known, score, p) {
 }
 
 /** A skill that has never been asked about: the starting belief and the first half-life. */
-export const fresh = (p = DEFAULTS) => ({ known: p.init, halfLife: FIRST_HALF_LIFE });
+export const fresh = (p = DEFAULTS) => ({ known: p.init, halfLife: p.first ?? FORGETTING.first });
 
 /**
  * One answer. The belief first fades for the days since the last answer, then is updated on
- * the score (1 right, 0 wrong, anything between is partial), and the half-life doubles after
- * a fully right answer and halves after a fully wrong one.
+ * the score (1 right, 0 wrong, anything between is partial), and the half-life grows after a
+ * fully right answer (doubles, by default) and shrinks after a fully wrong one (halves).
  */
 export function step(state, score, days, p = DEFAULTS) {
   const faded = decay(state.known, state.halfLife, days);
   return {
     known: update(Math.max(faded, 0.001), score, p),
-    halfLife: Math.min(180, Math.max(1, state.halfLife * (score === 1 ? 2 : score === 0 ? 0.5 : 1))),
+    halfLife: Math.min(180, Math.max(1, state.halfLife * (score === 1 ? (p.grow ?? FORGETTING.grow) : score === 0 ? (p.shrink ?? FORGETTING.shrink) : 1))),
   };
 }
 

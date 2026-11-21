@@ -19,7 +19,7 @@ import pandas as pd
 
 HERE = pathlib.Path(__file__).parent
 RESULTS = HERE / "data" / "duo" / "results"
-MODELS = ["constant", "ktrace_shipped", "ktrace_history", "ktrace_fit", "pimsleur", "leitner", "lr", "hlr"]
+MODELS = ["constant", "ktrace_shipped", "ktrace_history", "ktrace_fit", "ktrace_forget_fit", "ktrace_all_fit", "pimsleur", "leitner", "lr", "hlr"]
 
 
 def auc(y: np.ndarray, p: np.ndarray) -> float:

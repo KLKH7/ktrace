@@ -1,8 +1,9 @@
 export type Verdict = "explained" | "partial" | "missed";
 export type Answer = { when: string; skill: string; verdict: Verdict; track?: string; conversation?: string };
-export type Params = { init: number; learn: number; slip: number; guess: number };
+export type Params = { init: number; learn: number; slip: number; guess: number; first?: number; grow?: number; shrink?: number };
 export type Skill = { skill: string; known: number; halfLife: number; last: string; answers: number; missed: number };
 export const DEFAULTS: Params;
+export const FORGETTING: { first: number; grow: number; shrink: number };
 export const MIN_TO_FIT: number;
 export function canon(skill: string): string;
 export function decay(known: number, halfLife: number, days: number): number;

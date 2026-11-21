@@ -1,6 +1,6 @@
 {
   "date": "2026-11-21",
-  "git": "5d5d0dc",
+  "git": "13446f9",
   "seed": 42,
   "data": "Duolingo learning traces (Settles & Meeder 2016), first 3,000,000 reviews, last 10% scored",
   "scored_reviews": 300000,
@@ -11,13 +11,48 @@
       "init": 0.3,
       "learn": 0.15,
       "slip": 0.1,
-      "guess": 0.1
+      "guess": 0.1,
+      "first": 3,
+      "grow": 2,
+      "shrink": 0.5
     },
     "fitted": {
       "init": 0.8,
       "learn": 0.5,
       "slip": 0.05,
       "guess": 0.3
+    },
+    "forgetFit": {
+      "params": {
+        "init": 0.8,
+        "learn": 0.5,
+        "slip": 0.05,
+        "guess": 0.3,
+        "first": 22.78,
+        "grow": 10,
+        "shrink": 1
+      },
+      "trainLogLikelihood": -0.34441,
+      "atBound": [
+        "grow",
+        "shrink"
+      ]
+    },
+    "allFit": {
+      "params": {
+        "init": 0.8471,
+        "learn": 0.0004679,
+        "slip": 0.075,
+        "guess": 0.7594,
+        "first": 22.78,
+        "grow": 10,
+        "shrink": 1
+      },
+      "trainLogLikelihood": -0.32976,
+      "atBound": [
+        "grow",
+        "shrink"
+      ]
     },
     "trainAverageRecall": 0.8959309353882181
   },
@@ -68,6 +103,30 @@
         "value": 0.5663,
         "low": 0.5592,
         "high": 0.573
+      }
+    },
+    "ktrace_forget_fit": {
+      "mae": {
+        "value": 0.1538,
+        "low": 0.1504,
+        "high": 0.1573
+      },
+      "auc": {
+        "value": 0.5706,
+        "low": 0.5621,
+        "high": 0.5784
+      }
+    },
+    "ktrace_all_fit": {
+      "mae": {
+        "value": 0.1734,
+        "low": 0.1701,
+        "high": 0.1764
+      },
+      "auc": {
+        "value": 0.5838,
+        "low": 0.5752,
+        "high": 0.5929
       }
     },
     "pimsleur": {
