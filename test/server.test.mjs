@@ -8,9 +8,9 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 test("the tools work together", async () => {
-  const home = mkdtempSync(join(tmpdir(), "learn-"));
+  const home = mkdtempSync(join(tmpdir(), "ktrace-"));
   const client = new Client({ name: "test", version: "0" });
-  await client.connect(new StdioClientTransport({ command: process.execPath, args: [new URL("../bin/cli.mjs", import.meta.url).pathname, "serve"], env: { ...process.env, LEARN_HOME: home } }));
+  await client.connect(new StdioClientTransport({ command: process.execPath, args: [new URL("../bin/cli.mjs", import.meta.url).pathname, "serve"], env: { ...process.env, KTRACE_HOME: home } }));
   const call = async (name, args = {}) => (await client.callTool({ name, arguments: args })).content[0].text;
   try {
 

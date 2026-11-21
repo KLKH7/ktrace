@@ -22,7 +22,7 @@ function unasked(answers) {
 }
 
 const server = new McpServer(
-  { name: "learn", version: "0.1.0" },
+  { name: "ktrace", version: "0.1.0" },
   {
     instructions:
       "This server helps the user understand what you build for them, without slowing the build. " +

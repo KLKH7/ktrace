@@ -1,6 +1,6 @@
-# learn-while-it-builds
+# ktrace
 
-*Working name.* A small server for [Claude Code](https://claude.com/claude-code) that keeps your
+Knowledge tracing for people who build with coding agents. A small server for [Claude Code](https://claude.com/claude-code) that keeps your
 understanding up with the build.
 
 When an agent writes your code, the project moves forward and you don't. This gives the agent
@@ -28,13 +28,13 @@ Two things make it more than a notes file:
 Needs Node 20 or later and Claude Code.
 
 ```bash
-npx -y github:KLKH7/learn-while-it-builds install
+npx -y github:KLKH7/ktrace install
 ```
 
 Start a new Claude Code session and build something. Later:
 
 ```bash
-npx -y github:KLKH7/learn-while-it-builds map
+npx -y github:KLKH7/ktrace map
 ```
 
 ```text
@@ -50,11 +50,11 @@ Read next
     https://arxiv.org/abs/1506.05908
 ```
 
-To remove it: `npx -y github:KLKH7/learn-while-it-builds uninstall`.
+To remove it: `npx -y github:KLKH7/ktrace uninstall`.
 
 ## What it keeps, and where
 
-Plain files in `~/.learn-while-it-builds` on your machine: your answers, the ideas the agent
+Plain files in `~/.ktrace` on your machine: your answers, the ideas the agent
 noted, and the reading list. Nothing is uploaded. The only network use is checking a suggested
 source at arXiv, YouTube or its own page. There is no account and no telemetry.
 

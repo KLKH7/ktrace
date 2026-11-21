@@ -6,7 +6,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-export const home = () => process.env.LEARN_HOME ?? join(homedir(), ".learn-while-it-builds");
+export const home = () => process.env.KTRACE_HOME ?? join(homedir(), ".ktrace");
 
 export const lines = (file) => (existsSync(join(home(), file)) ? readFileSync(join(home(), file), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)) : []);
 
