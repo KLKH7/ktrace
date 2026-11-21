@@ -1,6 +1,6 @@
 {
   "date": "2026-11-21",
-  "git": "13446f9",
+  "git": "fbbc1ff",
   "seed": 42,
   "data": "Duolingo learning traces (Settles & Meeder 2016), first 3,000,000 reviews, last 10% scored",
   "scored_reviews": 300000,
