@@ -1,12 +1,15 @@
-// The MCP server: four tools that let a coding agent keep the user's understanding up with the
+// The MCP server: five tools that let a coding agent keep the user's understanding up with the
 // build, without slowing it. Everything is kept on this machine (see home() in store.mjs); the
 // only network use is checking a suggested source at arXiv, YouTube or its own page.
-import { basename } from "node:path";
+import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { basename, join, resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { canon, trace } from "./model.mjs";
-import { append, lines, reading, saveReading } from "./store.mjs";
+import { page } from "./page.mjs";
+import { append, home, lines, reading, saveReading } from "./store.mjs";
 import { verify } from "./verify.mjs";
 
 const cwd = process.cwd();
@@ -30,6 +33,7 @@ const server = new McpServer(
       "2) Before you explain something, or when deciding how much detail to give, call what_i_know and pitch the explanation to it: skip what they hold, slow down on what is weak. " +
       "3) When you finish a substantial piece of work, think about what lies ONE STEP BEYOND it: the paper, talk or post that the work is a small instance of, or that would change how the user builds the next thing. Call suggest_next for at most one or two. Aim at the level the user is working at (if they are building multi-agent systems, suggest research on agents, not introductory linear algebra); suggest a prerequisite only when what_i_know shows a real gap. Prefer primary sources and give an arXiv id whenever one exists. Only suggest what you are confident exists; the server checks every one against its source and refuses the rest. Then end your message with one line per accepted suggestion: its title, how long it takes, and why now. " +
       "4) If you ask the user to explain something in the chat and they answer, call record_answer with an honest verdict. Never record an answer they did not give. " +
+      "5) When a message from ktrace asks you to explain a change before stopping, call explain_change once, then stop. You may also call it unasked when the user asks what you built or why. " +
       "Never interrupt the work to teach, and never quiz the user in the middle of a task unless they ask.",
   },
 );
@@ -114,6 +118,72 @@ server.registerTool(
     const item = { id: `r_${Date.now().toString(36)}`, when: new Date().toISOString(), project: basename(cwd), cwd, kind, title: checked.title, by: checked.authors.join(", "), year: checked.year, url: checked.url, why: why_now, focus: focus ?? null, minutes, done: false };
     saveReading([item, ...list]);
     return text(`Added, confirmed at its source: "${item.title}"${item.by ? ` (${item.by}${item.year ? `, ${item.year}` : ""})` : ""}. Tell the user in one line: the title, ${minutes} minutes, and why now.`);
+  },
+);
+
+const squash = (s) => s.replace(/\s+/g, " ").trim();
+
+/** Opens a file in the user's browser, on any system. */
+function show(path) {
+  if (process.env.KTRACE_NO_OPEN) return;
+  const [command, ...args] = process.platform === "darwin" ? ["open", path] : process.platform === "win32" ? ["cmd", "/c", "start", "", path] : ["xdg-open", path];
+  spawn(command, args, { detached: true, stdio: "ignore" }).on("error", () => {}).unref();
+}
+
+server.registerTool(
+  "explain_change",
+  {
+    description:
+      "Open a page that teaches the user the ideas behind code you just wrote for them. They did not write it and may not know the ideas in it. " +
+      "Write for a bright second-year university student: simple words, short sentences, no unexplained jargon, no praise, no waste. " +
+      "Each source is checked where it claims to live and dropped if it does not match; each snippet is checked against the file and dropped if it is not there.",
+    inputSchema: {
+      check: z.string().max(40).optional().describe("The check id, when a ktrace message gave you one."),
+      summary: z.string().min(20).max(500).describe("Two sentences. What did this change create that didn't exist before? Why was it necessary? Don't list files."),
+      ideas: z
+        .array(
+          z.object({
+            name: z.string().min(2).max(80).describe("What this idea is usually called, in a few words."),
+            plain: z.string().min(40).max(900).describe("Three or four sentences explaining the idea itself. Explain it from nothing and give one concrete example (real life or numerical). Do not talk about the code here."),
+            here: z.string().min(10).max(400).describe("One or two sentences explaining what this idea is used for in this code."),
+            file: z.string().max(200).optional().describe("The file where this idea is most visible, relative to the project."),
+            snippet: z.string().max(1200).optional().describe("Up to ten consecutive lines from that file, copied exactly."),
+            question: z.string().min(10).max(300).describe("A question that can only be answered by someone who understands the idea, and cannot be answered by someone who has only memorised the code. Answerable out loud in less than a minute."),
+            source: z
+              .object({ title: z.string().max(200).describe("The title exactly as the source displays it."), url: z.string().max(400).describe("An arxiv.org/abs address, a YouTube link, or the canonical documentation page.") })
+              .optional()
+              .describe("The single best source for understanding this idea: the original paper, a widely known explainer video or lecture, or the canonical documentation page. Only name one you are sure exists at that address; leave it out if unsure."),
+          }),
+        )
+        .min(1)
+        .max(3)
+        .describe("The two or three ideas that need to be understood to really understand this change. Things that exist outside this code (an algorithm, a statistical method, a protocol, a pattern, a piece of maths), not a description of a file. Most important first."),
+    },
+  },
+  async ({ check, summary, ideas }) => {
+    const folder = join(home(), "checks");
+    mkdirSync(folder, { recursive: true });
+    const id = check && /^c_[a-z0-9]+$/.test(check) ? check : `c_${Date.now().toString(36)}`;
+    const saved = existsSync(join(folder, `${id}.json`)) ? JSON.parse(readFileSync(join(folder, `${id}.json`), "utf8")) : { id, when: new Date().toISOString(), project: basename(cwd), cwd };
+    const dropped = [];
+    const kept = await Promise.all(
+      ideas.map(async ({ source, file, snippet, ...idea }) => {
+        const out = { ...idea };
+        const path = file ? resolve(cwd, file) : null;
+        if (snippet && path?.startsWith(cwd) && existsSync(path) && squash(readFileSync(path, "utf8")).includes(squash(snippet))) Object.assign(out, { file, snippet });
+        else if (snippet) dropped.push(`the snippet for "${idea.name}" (not found in ${file ?? "any file"})`);
+        const checked = source ? await verify(source) : null;
+        if (checked?.ok) out.source = { title: checked.title, url: checked.url, by: checked.authors.slice(0, 2).join(", "), year: checked.year };
+        else if (source) dropped.push(`the source for "${idea.name}" (${checked.reason})`);
+        return out;
+      }),
+    );
+    const done = { ...saved, summary, ideas: kept };
+    writeFileSync(join(folder, `${id}.json`), JSON.stringify(done, null, 2));
+    writeFileSync(join(folder, `${id}.html`), page(done));
+    for (const idea of kept) append("concepts.jsonl", { when: new Date().toISOString(), name: canon(idea.name), why: idea.here, where: idea.file ?? null, project: basename(cwd), cwd });
+    show(join(folder, `${id}.html`));
+    return text(`The page is open in their browser (${join(folder, `${id}.html`)}).${dropped.length ? ` Left out because they did not check out: ${dropped.join("; ")}.` : ""} Tell the user in one short line that the ideas behind this change are open in their browser. Do not repeat the explanation.`);
   },
 );
 

@@ -11,7 +11,7 @@
     "src"
   ],
   "scripts": {
-    "test": "node --test --test-timeout=30000 test/model.test.mjs test/verify.test.mjs test/server.test.mjs"
+    "test": "node --test --test-timeout=30000 test/model.test.mjs test/verify.test.mjs test/server.test.mjs test/hook.test.mjs"
   },
   "engines": {
     "node": ">=20"

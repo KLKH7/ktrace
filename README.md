@@ -4,7 +4,7 @@ Knowledge tracing for people who build with coding agents. A small server for [C
 understanding up with the build.
 
 When an agent writes your code, the project moves forward and you don't. This gives the agent
-four tools so that changes, without slowing the work:
+five tools so that changes, without slowing the work:
 
 | Tool | What the agent does with it |
 |---|---|
@@ -12,6 +12,13 @@ four tools so that changes, without slowing the work:
 | `what_i_know` | Reads what you can and can't explain today, so it pitches explanations to you. |
 | `record_answer` | When it asks you something in the chat and you answer, it keeps the result. |
 | `suggest_next` | Proposes the one paper, talk or post just beyond what you built. |
+| `explain_change` | Opens a page that teaches the two or three ideas behind what it just wrote. |
+
+**After a change, a page opens.** Once the agent has written about forty lines, it is asked to
+explain them before it stops. The page gives a two-sentence summary, then each idea in plain
+words with one example, the lines of your code that use it, one source, and a question to try
+out loud. The agent writes it in the session you already have, so there is no second sign-in
+and no API key. It happens at most once every twenty minutes.
 
 Two things make it more than a notes file:
 
@@ -31,7 +38,12 @@ Needs Node 20 or later and Claude Code.
 npx -y github:KLKH7/ktrace install
 ```
 
-Start a new Claude Code session and build something. Later:
+This adds the server, and a hook that runs when the agent finishes a turn
+([`src/hook.mjs`](src/hook.mjs)). It works the same in the terminal and in the desktop app.
+Your Claude Code settings file is backed up beside itself first.
+
+Start a new Claude Code session and build something. A page opens after the first substantial
+change. To pause the pages, `touch ~/.ktrace/off`; delete that file to resume. Later:
 
 ```bash
 npx -y github:KLKH7/ktrace map
@@ -55,7 +67,7 @@ To remove it: `npx -y github:KLKH7/ktrace uninstall`.
 ## What it keeps, and where
 
 Plain files in `~/.ktrace` on your machine: your answers, the ideas the agent
-noted, and the reading list. Nothing is uploaded. The only network use is checking a suggested
+noted, the reading list, and each page with the explanation behind it (`checks/`). Nothing is uploaded. The only network use is checking a suggested
 source at arXiv, YouTube or its own page. There is no account and no telemetry.
 
 ## How it compares
@@ -155,6 +167,9 @@ To reproduce: `sh bench/duo_reference.sh`, then
 - Whether the agent calls the tools is up to the agent. The server tells it when to, and never
   to interrupt work to teach.
 - At most two reading suggestions per project per day. A short list gets read.
+- The page is written by the same agent that wrote the code. Its sources are confirmed and its
+  snippets are checked against your files, but the explanation itself is not checked by anything.
+- Writing the page costs the agent one extra step at the end of a turn.
 
 ## Related work
 
