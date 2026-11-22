@@ -45,7 +45,9 @@ if (command === "serve") {
   const { serve } = await import("../src/server.mjs");
   await serve();
 } else if (command === "install") {
-  const status = claude("mcp", "add", "--scope", "user", "ktrace", "--", "npx", "-y", SOURCE, "serve");
+  // already registered (an earlier install, or a local copy under development): leave it as it is
+  const has = spawnSync("claude", ["mcp", "get", "ktrace"], { stdio: "ignore" }).status === 0;
+  const status = has ? 0 : claude("mcp", "add", "--scope", "user", "ktrace", "--", "npx", "-y", SOURCE, "serve");
   if (status !== 0) {
     console.error("\nThat needs Claude Code's `claude` command on your PATH: https://claude.com/claude-code");
     process.exit(status);
