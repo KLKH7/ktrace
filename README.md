@@ -16,12 +16,17 @@ five tools so that changes, without slowing the work:
 
 **After a change, your notebook opens.** Once the agent has written about forty lines, it is
 asked to explain them before it stops. The notebook has a section for each project and a page
-for each topic; a change on a topic you already have is added to that page. Each entry gives a
-two-sentence summary, then each idea in plain words with one example, the lines of your code
+for each topic; a change on a topic you already have is added to that page. Each entry starts
+with where the change sits: what you were trying to do, what was there before, what is there
+now, and a small map of the project with the changed parts filled in. Each idea then comes in
+the order it is best met: the problem that calls for it, one thing to predict, the picture that
+settles it, and only then the idea in plain words with one example, the lines of your code
 that use it, one source with a diagram taken from inside it, and a question to try out loud
 with an answer hidden until you ask. The agent can also show an idea in the one format that suits
 it: a worked example in numbered steps, the code with a note beside each group of lines, two
-cases side by side, or a diagram of boxes and arrows that ktrace draws from a list.
+cases side by side, a diagram of boxes and arrows that ktrace draws from a list, or a walk:
+one picture you step through or play, with boxes lighting up and values and bars changing at
+each step.
 
 **When you are lost, you click instead of asking again.** Under each idea is the chain it rests
 on, folded shut: open it one level at a time until it makes sense. Every level has an "I'm lost

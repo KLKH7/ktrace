@@ -59,12 +59,13 @@ test("the tools work together", async () => {
   assert.doesNotMatch(await call("explain_change", { check: "c_deep", summary: "A change explained from a folder below the one the server started in.", ideas: [{ ...idea, name: "Paths", file: "store.mjs", snippet: line }] }), /Left out/);
   assert.match(await call("explain_change", { check: "c_deep", summary: "A file outside every folder the agent worked in is never read.", ideas: [{ ...idea, name: "Paths", file: "../../../../etc/hosts", snippet: "localhost" }] }), /Left out/);
   // a format is drawn when it holds up and left out, with the reason, when it does not
-  const shown = await call("explain_change", { topic: "Formats", summary: "An idea can be shown as worked steps, and a diagram with a loose arrow is refused.", ideas: [
-    { ...idea, name: "Steps", deeper: [{ name: "Exponential decay", plain: "Something that loses the same share in each equal stretch of time. Half, then half of that." }], answer: "Because each success is evidence the memory is stronger.", steps: { steps: [{ label: "Day 0", detail: "Chance 100%." }, { label: "Day 3", detail: "Chance 50%." }] } },
+  const shown = await call("explain_change", { topic: "Formats", goal: "Remember what was learned for longer.", before: "Every idea was forgotten at the same speed.", map: { nodes: [{ id: "m", label: "Memory model" }, { id: "q", label: "Questions" }], edges: [{ from: "q", to: "m" }], changed: ["m"] }, summary: "An idea can be shown as worked steps, and a diagram with a loose arrow is refused.", ideas: [
+    { ...idea, name: "Steps", problem: "Some things are forgotten in a day and others last a year, and one number has to say which.", predict: { ask: "After two half-lives, what chance is left?", answer: "A quarter." }, deeper: [{ name: "Exponential decay", plain: "Something that loses the same share in each equal stretch of time. Half, then half of that." }], answer: "Because each success is evidence the memory is stronger.", steps: { steps: [{ label: "Day 0", detail: "Chance 100%." }, { label: "Day 3", detail: "Chance 50%." }] } },
     { ...idea, name: "Loose", diagram: { nodes: [{ id: "a", label: "A" }, { id: "b", label: "B" }], edges: [{ from: "a", to: "nowhere" }] } },
   ] });
   assert.match(shown, /Left out[\s\S]*the diagram for "Loose"/);
-  assert.match(html(), /This rests on: <b>Exponential decay<\/b>[\s\S]*data-level="1"[\s\S]*Worked example[\s\S]*<b>Day 3<\/b>[\s\S]*<details>/);
+  assert.match(html(), /<dt>Goal<\/dt>[\s\S]*<dt>Before<\/dt>[\s\S]*<dt>Now<\/dt>[\s\S]*class="changed"[\s\S]*class="problem"[\s\S]*class="predict"[\s\S]*Worked example[\s\S]*class="plain"/, "context first, then problem, a guess, the picture, and only then the explanation");
+  assert.match(html(), /Worked example[\s\S]*<b>Day 3<\/b>[\s\S]*This rests on: <b>Exponential decay<\/b>[\s\S]*data-level="1"[\s\S]*<details>/);
   assert.match(await call("what_i_know"), /never asked about:[\s\S]*half life/);
   } finally {
     await client.close(); // or a failed check leaves the server running and the test hanging

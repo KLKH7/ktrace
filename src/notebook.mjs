@@ -4,7 +4,7 @@
 // self-contained file with nothing loaded from the network; its script only switches pages,
 // remembers the day or night choice, sends an "I'm lost here" click to ktrace and plays a
 // source video in place when asked (the one thing that then comes from the network), and without it every page is shown one after another.
-import { CSS as FORMATS, annotated, draw } from "./formats.mjs";
+import { CSS as FORMATS, SCRIPT as WALKS, annotated, draw, drawMap } from "./formats.mjs";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const kind = (url) => (/youtube\.com|youtu\.be/.test(url) ? "Watch" : /arxiv\.org/.test(url) ? "Paper" : "Read");
@@ -78,7 +78,11 @@ ${HUES.map((h, i) => `[data-hue="${i}"] { --raw: ${h}; }`).join(" ")}
 .idea > * { min-width: 0; }
 .idea h2 { margin: 0 0 2px; font-size: 17px; line-height: 1.35; font-weight: 600; }
 .idea h2 span { margin-right: 8px; color: var(--hue); }
-.plain, .ask, .deeper p { max-width: 76ch; }
+.plain, .ask, .deeper p, .problem, .predict { max-width: 76ch; }
+.context { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1px 12px; margin: 0; max-width: 100ch; font-size: 16px; }
+.context dt { font-size: 12px; font-weight: 600; color: var(--hue); line-height: 2; } .context dd { margin: 0; }
+.problem { font-size: 16px; } .predict { margin-top: 4px; font-weight: 600; } .predict details p { font-weight: 400; }
+.predict mark { background: var(--mark); color: var(--mark-ink); padding: 1px 4px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 .ask { font-weight: 600; } .ask mark { background: var(--mark); color: var(--mark-ink); padding: 1px 4px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 details { margin-top: 4px; } summary { cursor: pointer; color: var(--soft); font-size: 13px; font-weight: 400; } details[open] > summary { color: var(--ink); }
 .ask details p { font-weight: 400; }
@@ -106,7 +110,7 @@ pre { margin: 0; padding: 8px 10px; font: 12.5px/1.5 var(--mono); white-space: p
 ${FORMATS}
 @media (min-width: 1280px) {
   .idea { grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); }
-  .what { grid-area: 1 / 1; } .here { grid-area: 1 / 2; } .show { grid-area: 2 / 1 / auto / -1; } .ask { grid-area: 3 / 1; } .source { grid-area: 3 / 2; }
+  .what { grid-area: 1 / 1 / auto / -1; } .show { grid-area: 2 / 1 / auto / -1; } .explain { grid-area: 3 / 1; } .here { grid-area: 3 / 2; } .ask { grid-area: 4 / 1; } .source { grid-area: 4 / 2; }
   .idea.stack > * { grid-area: auto / 1 / auto / -1; }
 }
 @media (max-width: 860px) {
@@ -168,16 +172,26 @@ const ladder = (id, k, i, level = 1) => {
   return d ? `<details class="deeper"><summary>This rests on: <b>${esc(d.name)}</b></summary><p>${esc(d.plain)}${lost(id, k, level, i.name, d.name)}</p>${ladder(id, k, i, level + 1)}</details>` : "";
 };
 
+// An idea is laid out in the order it is best met: the problem that calls for it, a guess to
+// commit to, the picture that settles the guess, and only then the explanation and the code.
 const idea = (i, k, id) => `<section class="idea${i.snippet && i.annotations ? " stack" : ""}">
 <div class="what"><h2><span>${k + 1}</span>${esc(i.name)}</h2>
-<p class="plain">${esc(i.plain)}${lost(id, k, 0, i.name, i.name)}</p>
-${ladder(id, k, i)}</div>
+${i.problem ? `<p class="problem">${esc(i.problem)}</p>` : ""}
+${i.predict ? `<div class="predict"><p><mark>${esc(i.predict.ask)}</mark></p><details><summary>Commit to a guess, then check</summary><p>${esc(i.predict.answer)}</p></details></div>` : ""}</div>
 ${draw(i)}
+<div class="explain"><p class="plain">${esc(i.plain)}${lost(id, k, 0, i.name, i.name)}</p>
+${ladder(id, k, i)}</div>
 <div class="here"><p><span class="tag">In this code</span> ${esc(i.here)}</p>
 ${i.snippet ? (i.annotations ? annotated(i.annotations, i.file) : `<figure class="code"><figcaption>${esc(i.file)}</figcaption><pre>${esc(i.snippet)}</pre></figure>`) : ""}</div>
 <div class="ask"><p><mark>${esc(i.question)}</mark></p>${i.answer ? `<details><summary>Say your answer first, then check</summary><p>${esc(i.answer)}</p></details>` : ""}</div>
 ${source(i.source)}
 </section>`;
+
+/** Where a change sits, said before anything is explained: the goal, what was there, what is there now, and the parts it touched. */
+const context = (e) =>
+  e.goal || e.before
+    ? `<dl class="context">${e.goal ? `<dt>Goal</dt><dd>${esc(e.goal)}</dd>` : ""}${e.before ? `<dt>Before</dt><dd>${esc(e.before)}</dd>` : ""}<dt>Now</dt><dd>${esc(e.summary)}</dd></dl>`
+    : `<p class="summary">${esc(e.summary)}</p>`;
 
 /** The whole notebook for these checks, as HTML. `latest` is the id of the entry just added; `token` goes back with each "I'm lost here" click. */
 export function notebook(checks, latest, token = "") {
@@ -198,7 +212,8 @@ ${p.entries
   .map(
     (e) => `<section class="entry${e.id === latest ? " new" : ""}" id="${esc(e.id)}">
 <p class="stamp">${e.id === latest ? "<b>New</b> · " : ""}${day(e.when)}, ${clock(e.when)}${e.lines ? ` · ${e.lines} lines` : ""}</p>
-<p class="summary">${esc(e.summary)}</p>
+${context(e)}
+${e.map ? drawMap(e.map) : ""}
 ${e.ideas.map((x, k) => idea(x, k, e.id)).join("\n")}
 </section>`,
   )
@@ -231,6 +246,7 @@ ${body || `<p class="empty">Nothing here yet. Pages appear as Claude explains th
 </main>
 </div>
 <script>${SCRIPT}</script>
+<script>${WALKS}</script>
 </body>
 </html>
 `;

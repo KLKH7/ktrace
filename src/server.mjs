@@ -9,7 +9,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { canon, trace } from "./model.mjs";
 import { figure } from "./figure.mjs";
-import { KINDS, check as format } from "./formats.mjs";
+import { KINDS, check as format, checkMap } from "./formats.mjs";
 import { notebook, shelve } from "./notebook.mjs";
 import { address, token } from "./web.mjs";
 import { append, home, lines, reading, saveReading } from "./store.mjs";
@@ -159,11 +159,22 @@ server.registerTool(
       "Add an entry to the user's notebook that teaches the ideas behind code you just wrote for them, and open it. They did not write it and may not know the ideas in it. " +
       "The notebook has a section for each project and a page for each topic: a change on a topic that already has a page is added to that page. " +
       "Write for a bright second-year university student: simple words, short sentences, no unexplained jargon, no praise, no waste. " +
-      "Besides the prose, give each idea at most ONE format (steps, annotations, contrast or diagram), the one that suits it; a second is ignored, and an idea that needs none can go without. " +
+      "Order matters more than polish. Give the context first (goal, before, map); then for each idea the problem that calls for it and one thing to predict, before the format and the explanation. " +
+      "Besides the prose, give each idea at most ONE format (steps, annotations, contrast, diagram or walk), the one that suits it; a second is ignored, and an idea that needs none can go without. " +
       "Each source is checked where it claims to live and dropped if it does not match, and a diagram is taken from inside it when it has one; each snippet is checked against the file and dropped if it is not there.",
     inputSchema: {
       check: z.string().max(40).optional().describe("The check id, when a ktrace message gave you one."),
       topic: z.string().min(2).max(60).optional().describe("The notebook page this belongs on: the subject in two to four words, e.g. 'Rate limiting'. Reuse the exact name of an existing page when the change continues that subject; give a new name only for a new subject."),
+      goal: z.string().min(10).max(300).optional().describe("CONTEXT, given first so the rest makes sense: what the user was trying to get done, in their own terms, in one or two sentences. Not what the code does."),
+      before: z.string().min(10).max(300).optional().describe("CONTEXT: what was there before this change and what was missing or going wrong, in one or two sentences."),
+      map: z
+        .object({
+          nodes: z.array(z.object({ id: z.string().max(20), label: z.string().max(44).describe("A part of the project, in two to five words.") })).min(2).max(7),
+          edges: z.array(z.object({ from: z.string().max(20), to: z.string().max(20), label: z.string().max(24).optional() })).max(10).optional(),
+          changed: z.array(z.string().max(20)).min(1).max(7).describe("Ids of the parts this change added or altered."),
+        })
+        .optional()
+        .describe("CONTEXT: the few parts of the project this change lives among and how they connect, with the changed ones named. It is drawn above the ideas so the user sees where the change sits."),
       summary: z.string().min(20).max(500).describe("Two sentences. What did this change create that didn't exist before? Why was it necessary? Don't list files."),
       ideas: z
         .array(
@@ -174,6 +185,11 @@ server.registerTool(
             file: z.string().max(200).optional().describe("The file where this idea is most visible, relative to the project."),
             snippet: z.string().max(1200).optional().describe("Up to ten consecutive lines from that file, copied exactly."),
             question: z.string().min(10).max(300).describe("A question that can only be answered by someone who understands the idea, and cannot be answered by someone who has only memorised the code. Answerable out loud in less than a minute."),
+            problem: z.string().min(20).max(300).optional().describe("Shown BEFORE the idea is explained: the situation that makes this idea necessary, as a difficulty the user can feel, without naming the idea. E.g. 'Requests can arrive faster than the service can handle, but short bursts are normal and should not be refused.'"),
+            predict: z
+              .object({ ask: z.string().min(10).max(240).describe("One concrete case to predict, with real numbers, that the format then answers."), answer: z.string().min(5).max(300) })
+              .optional()
+              .describe("Shown after the problem and BEFORE the format: a prediction the user commits to first. People learn more from an explanation after guessing than from reading it cold."),
             deeper: z
               .array(z.object({ name: z.string().min(2).max(80).describe("What this is usually called."), plain: z.string().min(30).max(500).describe("Two or three sentences from nothing, with one tiny example.") }))
               .min(1)
@@ -211,6 +227,26 @@ server.registerTool(
               })
               .optional()
               .describe("FORMAT, for a system, a flow or a set of states: boxes and the arrows between them, drawn left to right. Do not draw the page yourself."),
+            walk: z
+              .object({
+                nodes: z.array(z.object({ id: z.string().max(20), label: z.string().max(44).describe("Two to five words.") })).min(2).max(7).optional(),
+                edges: z.array(z.object({ from: z.string().max(20), to: z.string().max(20), label: z.string().max(24).optional() })).max(10).optional(),
+                meters: z.array(z.object({ id: z.string().max(20), label: z.string().max(30), max: z.number().positive().describe("The value at which the bar is full.") })).max(3).optional().describe("Quantities that go up and down, each drawn as a bar, e.g. tokens in a bucket."),
+                frames: z
+                  .array(
+                    z.object({
+                      say: z.string().min(4).max(160).describe("What happens at this step, in one sentence with the real numbers."),
+                      ask: z.string().max(160).optional().describe("On one or two steps only: a question about what the NEXT step will show. Playing stops here until the user steps on."),
+                      focus: z.array(z.string().max(20)).max(4).optional().describe("Ids of the boxes this step is about; they light up and the rest fade."),
+                      values: z.record(z.string().max(18)).optional().describe("New values to show inside boxes, by id. A value stays until a later step changes it."),
+                      meters: z.record(z.number()).optional().describe("New meter readings, by id. A reading stays until a later step changes it."),
+                    }),
+                  )
+                  .min(3)
+                  .max(8),
+              })
+              .optional()
+              .describe("FORMAT, for a process whose state changes as it runs: ONE picture shown a step at a time, like a slowed-down animation. Give boxes and arrows, or meters, or both, then the steps: each changes one thing. The user steps through or plays it. Prefer this over steps or diagram when values move through a structure."),
             source: z
               .object({
                 title: z.string().max(200).describe("The title exactly as the source displays it."),
@@ -227,20 +263,21 @@ server.registerTool(
         .describe("The two or three ideas that need to be understood to really understand this change. Things that exist outside this code (an algorithm, a statistical method, a protocol, a pattern, a piece of maths), not a description of a file. Most important first."),
     },
   },
-  async ({ check, topic, summary, ideas }) => {
+  async ({ check, topic, goal, before, map, summary, ideas }) => {
     const folder = join(home(), "checks");
     mkdirSync(folder, { recursive: true });
     const id = check && /^c_[a-z0-9]+$/.test(check) ? check : `c_${Date.now().toString(36)}`;
     const saved = existsSync(join(folder, `${id}.json`)) ? JSON.parse(readFileSync(join(folder, `${id}.json`), "utf8")) : { id, when: new Date().toISOString(), project: basename(cwd), cwd };
     const dropped = [];
     const kept = await Promise.all(
-      ideas.map(async ({ source, file, snippet, steps, annotations, contrast, diagram, ...idea }) => {
+      ideas.map(async ({ source, file, snippet, steps, annotations, contrast, diagram, walk, ...idea }) => {
         const out = { ...idea };
         if (snippet && file && roots(saved.cwd).some((root) => holds(root, file, snippet))) Object.assign(out, { file, snippet });
         else if (snippet) dropped.push(`the snippet for "${idea.name}" (not found in ${file ?? "any file"})`);
-        const shown = format({ steps, annotations, contrast, diagram }, out.snippet);
+        const given = { steps, annotations, contrast, diagram, walk };
+        const shown = format(given, out.snippet);
         if (shown?.kind) out[shown.kind] = shown.data;
-        else if (shown) dropped.push(`the ${KINDS.find((k) => ({ steps, annotations, contrast, diagram })[k])} for "${idea.name}" (${shown.reason})`);
+        else if (shown) dropped.push(`the ${KINDS.find((k) => given[k])} for "${idea.name}" (${shown.reason})`);
         const checked = source ? await verify(source) : null;
         if (checked?.ok) {
           out.source = { title: checked.title, url: checked.url, by: checked.authors.slice(0, 2).join(", "), year: checked.year };
@@ -252,7 +289,9 @@ server.registerTool(
         return out;
       }),
     );
-    const done = { ...saved, ...(topic ? { topic: topic.trim() } : {}), summary, ideas: kept };
+    const placed = map ? checkMap(map) : null;
+    if (placed?.reason) dropped.push(`the map (${placed.reason})`);
+    const done = { ...saved, ...(topic ? { topic: topic.trim() } : {}), ...(goal ? { goal } : {}), ...(before ? { before } : {}), ...(placed?.map ? { map } : {}), summary, ideas: kept };
     writeFileSync(join(folder, `${id}.json`), JSON.stringify(done, null, 2));
     // the notebook is rebuilt from every saved check, so the files in checks/ stay the only record
     const all = readdirSync(folder).filter((f) => f.endsWith(".json")).map((f) => JSON.parse(readFileSync(join(folder, f), "utf8")));

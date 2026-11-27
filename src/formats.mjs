@@ -5,10 +5,11 @@
 //   annotations  the snippet with a note beside each group of lines: for an idea visible in lines
 //   contrast     two cases that differ in one thing: for a design choice or a common mistake
 //   diagram      boxes and arrows: for a system, a flow or a set of states
+//   walk         one picture shown a step at a time, values changing: for a process whose state moves
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const squash = (s) => String(s).replace(/\s+/g, " ").trim();
 
-export const KINDS = ["steps", "annotations", "contrast", "diagram"];
+export const KINDS = ["steps", "annotations", "contrast", "diagram", "walk"];
 
 /**
  * Keeps the one format an idea was given, if it holds up: `{ kind, data }`, or `{ reason }`
@@ -29,8 +30,34 @@ export function check(idea, snippet) {
     const loose = data.edges.find((e) => !ids.has(e.from) || !ids.has(e.to));
     if (loose) return { reason: `an arrow joins "${loose.from}" to "${loose.to}", and one of them is not a box` };
   }
+  if (kind === "walk") {
+    const boxes = new Set((data.nodes ?? []).map((n) => n.id));
+    const bars = new Set((data.meters ?? []).map((m) => m.id));
+    if (!boxes.size && !bars.size) return { reason: "a walk needs boxes or meters to show" };
+    if (boxes.size !== (data.nodes ?? []).length) return { reason: "two boxes in the walk share an id" };
+    const loose = (data.edges ?? []).find((e) => !boxes.has(e.from) || !boxes.has(e.to));
+    if (loose) return { reason: `an arrow joins "${loose.from}" to "${loose.to}", and one of them is not a box` };
+    for (const [k, f] of data.frames.entries()) {
+      const stray = [...(f.focus ?? []), ...Object.keys(f.values ?? {})].find((id) => !boxes.has(id)) ?? Object.keys(f.meters ?? {}).find((id) => !bars.has(id));
+      if (stray) return { reason: `step ${k + 1} of the walk names "${stray}", which is not one of its boxes or meters` };
+    }
+  }
   return { kind, data };
 }
+
+/** The map of a project's parts with the changed ones marked: the map if it holds up, else `{ reason }`. */
+export function checkMap(map) {
+  const ids = new Set(map.nodes.map((n) => n.id));
+  if (ids.size !== map.nodes.length) return { reason: "two boxes in the map share an id" };
+  const loose = (map.edges ?? []).find((e) => !ids.has(e.from) || !ids.has(e.to));
+  if (loose) return { reason: `an arrow joins "${loose.from}" to "${loose.to}", and one of them is not a box` };
+  const stray = (map.changed ?? []).find((id) => !ids.has(id));
+  if (stray) return { reason: `it marks "${stray}" as changed, which is not one of its boxes` };
+  return { map };
+}
+
+/** The map drawn, with the parts this change touched filled in. */
+export const drawMap = (map) => `<div class="show diagram map">${picture({ nodes: map.nodes, edges: map.edges ?? [] }, false, map.changed ?? [])}</div>`;
 
 const steps = (d) => `<div class="show steps"><p class="tag">Worked example</p>
 ${d.given ? `<p class="given">${esc(d.given)}</p>` : ""}
@@ -53,7 +80,7 @@ function dedent(code) {
   return [first.trimStart(), ...rest.map((l) => l.slice(Number.isFinite(cut) ? cut : 0))].join("\n");
 }
 
-const [W, H, GAP_X, GAP_Y, PAD] = [160, 46, 52, 14, 6];
+const [W, BOX, GAP_X, GAP_Y, PAD] = [160, 46, 84, 14, 6];
 
 /** Splits a label over at most two lines that fit a box. */
 function wrap(label) {
@@ -70,7 +97,7 @@ function wrap(label) {
  * Where each box goes: columns left to right, a box one column after the last box that points
  * to it. An arrow that points back along a loop is left out of the ordering so loops still fit.
  */
-export function layout({ nodes, edges }) {
+export function layout({ nodes, edges }, H = BOX) {
   const out = new Map(nodes.map((n) => [n.id, edges.filter((e) => e.from === n.id)]));
   const state = new Map();
   const back = new Set();
@@ -94,9 +121,11 @@ export function layout({ nodes, edges }) {
   return { at, back, width: PAD * 2 + columns.length * W + (columns.length - 1) * GAP_X, height: height + PAD * 2 };
 }
 
-function diagram(d) {
-  const { at, width, height } = layout(d);
-  const low = height + 34; // room under the boxes for arrows that loop back
+/** Boxes and arrows as an SVG picture. With `live`, each box and arrow is named so a walk can light it and each box has room for a value. */
+function picture(d, live = false, marked = []) {
+  const H = live ? BOX + 20 : BOX;
+  const { at, width, height } = layout(d, H);
+  const low = height + 30; // room under the boxes for arrows that loop back
   let loops = false;
   const arrows = d.edges
     .map((e) => {
@@ -113,27 +142,62 @@ function diagram(d) {
         path = `M${x1},${a.y + H} C${x1},${low} ${x2},${low} ${x2},${b.y + H + 7}`;
         [lx, ly] = [(x1 + x2) / 2, low - 14];
       }
-      return `<path d="${path}" marker-end="url(#tip)"/>${e.label ? `<text class="on" x="${lx}" y="${ly}">${esc(e.label)}</text>` : ""}`;
+      return `<path d="${path}" marker-end="url(#tip)"${live ? ` data-from="${esc(e.from)}" data-to="${esc(e.to)}"` : ""}/>${e.label ? `<text class="on" x="${lx}" y="${ly}">${esc(e.label)}</text>` : ""}`;
     })
     .join("");
   const boxes = d.nodes
     .map((n) => {
       const { x, y } = at.get(n.id);
       const lines = wrap(n.label);
-      return `<rect x="${x}" y="${y}" width="${W}" height="${H}" rx="8"/>${lines.map((l, k) => `<text x="${x + W / 2}" y="${y + H / 2 + 5 + (k - (lines.length - 1) / 2) * 17}">${esc(l)}</text>`).join("")}`;
+      const middle = y + (live ? BOX / 2 + 2 : H / 2);
+      const label = lines.map((l, k) => `<text x="${x + W / 2}" y="${middle + 5 + (k - (lines.length - 1) / 2) * 16}">${esc(l)}</text>`).join("");
+      return live ? `<g class="node" data-id="${esc(n.id)}"><rect x="${x}" y="${y}" width="${W}" height="${H}" rx="8"/>${label}<text class="val" x="${x + W / 2}" y="${y + H - 9}"></text></g>` : `<rect${marked.includes(n.id) ? ' class="changed"' : ""} x="${x}" y="${y}" width="${W}" height="${H}" rx="8"/>${label}`;
     })
     .join("");
   const tall = loops ? low + 4 : height;
-  return `<div class="show diagram"><p class="tag">How it fits together</p>
-<div class="scroll"><svg viewBox="0 0 ${width} ${tall}" width="${width}" height="${tall}" role="img" aria-label="${esc(d.nodes.map((n) => n.label).join(", "))}"><defs><marker id="tip" viewBox="0 0 8 8" refX="1" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path class="tip" d="M0,0 L8,4 L0,8z"/></marker></defs>${arrows}${boxes}</svg></div>
-${d.caption ? `<p class="result">${esc(d.caption)}</p>` : ""}</div>`;
+  return `<div class="scroll"><svg viewBox="0 0 ${width} ${tall}" width="${width}" height="${tall}" role="img" aria-label="${esc(d.nodes.map((n) => n.label).join(", "))}"><defs><marker id="tip" viewBox="0 0 8 8" refX="1" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path class="tip" d="M0,0 L8,4 L0,8z"/></marker></defs>${arrows}${boxes}</svg></div>`;
 }
+
+const diagram = (d) => `<div class="show diagram"><p class="tag">How it fits together</p>
+${picture(d)}
+${d.caption ? `<p class="result">${esc(d.caption)}</p>` : ""}</div>`;
+
+/**
+ * One picture and the steps it goes through. The steps travel in the page as data and its
+ * script shows one at a time; without the script every step is listed under the picture.
+ */
+const walk = (d) => `<div class="show walk diagram" tabindex="0" data-frames="${esc(JSON.stringify(d.frames))}"><p class="tag">Step by step</p>
+${d.nodes?.length ? picture({ nodes: d.nodes, edges: d.edges ?? [] }, true) : ""}
+${(d.meters ?? []).map((m) => `<div class="meter" data-id="${esc(m.id)}" data-max="${m.max}"><span>${esc(m.label)}</span><div class="track"><i></i></div><b></b></div>`).join("")}
+<div class="ctl"><button type="button" data-go="-1" aria-label="Previous step">‹</button><span class="count"></span><button type="button" data-go="1" aria-label="Next step">›</button><button type="button" data-go="play">Play</button><p class="say" aria-live="polite"></p></div>
+<p class="pose"><mark></mark></p>
+<ol class="frames">${d.frames.map((f) => `<li>${esc(f.say)}${f.ask ? ` <mark>${esc(f.ask)}</mark>` : ""}</li>`).join("")}</ol></div>`;
+
+// Shows each walk one step at a time. What a box or meter holds at a step is the last value any step up to it gave.
+// A step that asks something stops the playing there, so the reader answers before going on.
+export const SCRIPT = `(function(){[].forEach.call(document.querySelectorAll(".walk"),function(w){
+var fr=JSON.parse(w.dataset.frames),i=0,timer=null,pose=w.querySelector(".pose mark"),say=w.querySelector(".say"),count=w.querySelector(".count"),play=w.querySelector("[data-go=play]");
+function held(key,id){var v=null;for(var k=0;k<=i;k++)if(fr[k][key]&&fr[k][key][id]!=null)v=fr[k][key][id];return v}
+function show(){var f=fr[i],focus=f.focus||[];
+[].forEach.call(w.querySelectorAll(".node"),function(g){var id=g.dataset.id,on=focus.indexOf(id)>=0,v=held("values",id);g.classList.toggle("lit",on);g.classList.toggle("dim",focus.length>0&&!on);g.querySelector(".val").textContent=v==null?"":v});
+[].forEach.call(w.querySelectorAll("path[data-from]"),function(p){p.classList.toggle("lit",focus.indexOf(p.dataset.from)>=0&&focus.indexOf(p.dataset.to)>=0)});
+[].forEach.call(w.querySelectorAll(".meter"),function(m){var v=held("meters",m.dataset.id);m.querySelector("i").style.width=Math.max(0,Math.min(100,100*(v||0)/m.dataset.max))+"%";m.querySelector("b").textContent=v==null?"":v});
+say.textContent=f.say;pose.textContent=f.ask||"";pose.parentNode.hidden=!f.ask;count.textContent=(i+1)+" / "+fr.length;
+w.querySelector("[data-go='-1']").disabled=i===0;w.querySelector("[data-go='1']").disabled=i===fr.length-1}
+function stop(){clearInterval(timer);timer=null;play.textContent="Play"}
+function go(by){i=Math.max(0,Math.min(fr.length-1,i+by));show();if(i===fr.length-1||fr[i].ask)stop()}
+w.addEventListener("click",function(e){var b=e.target.closest("[data-go]");if(!b)return;
+if(b.dataset.go!=="play"){stop();return go(+b.dataset.go)}
+if(timer)return stop();if(i===fr.length-1){i=0;show()}play.textContent="Pause";timer=setInterval(function(){go(1)},1900)});
+w.addEventListener("keydown",function(e){if(e.key==="ArrowRight"){stop();go(1)}if(e.key==="ArrowLeft"){stop();go(-1)}});
+show()})})()`;
 
 /** The format drawn as HTML to sit under the idea's prose; nothing for annotations, which replace the snippet. */
 export function draw(idea) {
   if (idea.steps) return steps(idea.steps);
   if (idea.contrast) return contrast(idea.contrast);
   if (idea.diagram) return diagram(idea.diagram);
+  if (idea.walk) return walk(idea.walk);
   return "";
 }
 
@@ -155,6 +219,25 @@ export const CSS = `
 .diagram text.on { fill: var(--soft); font-size: 12px; paint-order: stroke; stroke: var(--canvas); stroke-width: 5px; }
 .diagram svg > path { fill: none; stroke: var(--soft); stroke-width: 1.5; }
 .diagram .tip { fill: var(--soft); }
+.walk { outline: 0; }
+.pose { margin-top: 2px; font-weight: 600; } .pose mark, .frames mark { background: var(--mark); color: var(--mark-ink); padding: 1px 4px; }
+.map rect.changed { fill: color-mix(in srgb, var(--hue) 24%, var(--canvas)); stroke-width: 2.5; }
+.walk .node rect, .walk .node, .walk svg > path { transition: fill 0.35s, stroke 0.35s, stroke-width 0.35s, opacity 0.35s; }
+.walk .node.lit rect { fill: color-mix(in srgb, var(--hue) 20%, var(--canvas)); stroke-width: 2.5; }
+.walk .node.dim { opacity: 0.4; }
+.walk .val { fill: var(--hue); font-size: 14px; font-weight: 700; }
+.walk svg > path.lit { stroke: var(--hue); stroke-width: 2.5; }
+.meter { display: grid; grid-template-columns: minmax(0, 18ch) minmax(0, 360px) 5ch; gap: 10px; align-items: center; margin-top: 4px; font-size: 14px; }
+.meter .track { height: 14px; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+.meter i { display: block; height: 100%; width: 0; background: var(--hue); transition: width 0.5s; }
+.meter b { color: var(--hue); font-variant-numeric: tabular-nums; }
+.ctl { display: flex; align-items: baseline; gap: 6px; margin-top: 6px; }
+.ctl button { padding: 0 9px; border: 1px solid var(--line); border-radius: 4px; background: var(--pick); cursor: pointer; line-height: 1.6; }
+.ctl button:disabled { opacity: 0.35; cursor: default; }
+.ctl .count { color: var(--soft); font-size: 13px; font-variant-numeric: tabular-nums; min-width: 5ch; text-align: center; }
+.ctl .say { margin-left: 8px; font-weight: 600; }
+.frames { margin: 4px 0 0; padding-left: 22px; }
+.js .frames, html:not(.js) .ctl { display: none; }
 .noted .row { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); border-top: 1px solid #ffffff1f; }
 .noted .row:first-of-type { border-top: 0; }
 .noted .row p { padding: 8px 10px; font-size: 13px; line-height: 1.45; border-left: 2px solid var(--hue); background: #ffffff12; }
