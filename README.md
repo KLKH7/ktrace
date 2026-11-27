@@ -34,6 +34,15 @@ here" link. Click it and, at the end of its next turn, the agent explains only t
 one level further back, on the same page. For this the notebook is served from your own machine
 (`127.0.0.1`, nowhere else); opened as a file, the link copies the question for you to paste.
 
+**It shows little at a time.** An entry opens on its first idea only, and an idea shows only
+its problem, a prediction and its picture; the explanation, code and question are folded under
+one line. Older entries on a page are one line each until opened.
+
+**Questions come back.** A "Due today" page lists a few questions from earlier entries: each
+idea a day after it was explained, and again whenever it has had time to fade. Answer out loud,
+then mark Got it, Partly or Missed; that feeds the same model `what_i_know` reads, which sets
+when it comes round next.
+
 **A video source plays inside the notebook.** When the best source for an idea is a YouTube
 video, it is shown as its still frame; click it and it plays in place, from the minute that
 matters when the agent gave one. Nothing is fetched from YouTube until you click. It

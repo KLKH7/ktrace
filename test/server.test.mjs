@@ -48,7 +48,7 @@ test("the tools work together", async () => {
   assert.match(html(), /<h1>Forgetting<\/h1>[\s\S]*<\/span>Half-life<\/h2>[\s\S]*<figcaption>src\/store.mjs<\/figcaption><pre>[^<]*KTRACE_HOME/);
   // the same topic again, written differently, is added to the page it already has
   assert.match(await call("explain_change", { topic: "forgetting.", summary: "A second change on the same subject, which belongs on the same page.", ideas: [{ ...idea, name: "Decay" }] }), /added to the page "Forgetting", which now has 2 entries/);
-  assert.equal(html().match(/<article class="page"/g).length, 1);
+  assert.equal(html().match(/<article class="page" id="page-/g).length, 1);
   assert.match(html(), /A &lt;made-up&gt; idea/);
   for (const [, script] of html().matchAll(/<script>([\s\S]*?)<\/script>/g)) new Function(script); // the page's scripts at least parse
   assert.doesNotMatch(html(), /this line is not in the file|insecure\.example/);

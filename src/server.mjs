@@ -10,8 +10,8 @@ import { z } from "zod";
 import { canon, trace } from "./model.mjs";
 import { figure } from "./figure.mjs";
 import { KINDS, check as format, checkMap } from "./formats.mjs";
-import { notebook, shelve } from "./notebook.mjs";
-import { address, token } from "./web.mjs";
+import { shelve } from "./notebook.mjs";
+import { address, build } from "./web.mjs";
 import { append, home, lines, reading, saveReading } from "./store.mjs";
 import { verify } from "./verify.mjs";
 
@@ -159,14 +159,15 @@ server.registerTool(
       "Add an entry to the user's notebook that teaches the ideas behind code you just wrote for them, and open it. They did not write it and may not know the ideas in it. " +
       "The notebook has a section for each project and a page for each topic: a change on a topic that already has a page is added to that page. " +
       "Write for a bright second-year university student: simple words, short sentences, no unexplained jargon, no praise, no waste. " +
+      "USE FEW WORDS. The user is overwhelmed by text and learns from the pictures: what they see first is only the problem, the prediction and the format, with everything else folded away. One short sentence wherever one will do. " +
       "Order matters more than polish. Give the context first (goal, before, map); then for each idea the problem that calls for it and one thing to predict, before the format and the explanation. " +
       "Besides the prose, give each idea at most ONE format (steps, annotations, contrast, diagram or walk), the one that suits it; a second is ignored, and an idea that needs none can go without. " +
       "Each source is checked where it claims to live and dropped if it does not match, and a diagram is taken from inside it when it has one; each snippet is checked against the file and dropped if it is not there.",
     inputSchema: {
       check: z.string().max(40).optional().describe("The check id, when a ktrace message gave you one."),
       topic: z.string().min(2).max(60).optional().describe("The notebook page this belongs on: the subject in two to four words, e.g. 'Rate limiting'. Reuse the exact name of an existing page when the change continues that subject; give a new name only for a new subject."),
-      goal: z.string().min(10).max(300).optional().describe("CONTEXT, given first so the rest makes sense: what the user was trying to get done, in their own terms, in one or two sentences. Not what the code does."),
-      before: z.string().min(10).max(300).optional().describe("CONTEXT: what was there before this change and what was missing or going wrong, in one or two sentences."),
+      goal: z.string().min(10).max(160).optional().describe("CONTEXT, given first so the rest makes sense: what the user was trying to get done, in their own terms, in one or two sentences. Not what the code does."),
+      before: z.string().min(10).max(160).optional().describe("CONTEXT: what was there before this change and what was missing or going wrong, in one or two sentences."),
       map: z
         .object({
           nodes: z.array(z.object({ id: z.string().max(20), label: z.string().max(44).describe("A part of the project, in two to five words.") })).min(2).max(7),
@@ -175,19 +176,19 @@ server.registerTool(
         })
         .optional()
         .describe("CONTEXT: the few parts of the project this change lives among and how they connect, with the changed ones named. It is drawn above the ideas so the user sees where the change sits."),
-      summary: z.string().min(20).max(500).describe("Two sentences. What did this change create that didn't exist before? Why was it necessary? Don't list files."),
+      summary: z.string().min(20).max(240).describe("One sentence, two at most: what this change created that did not exist before. Don't list files."),
       ideas: z
         .array(
           z.object({
             name: z.string().min(2).max(80).describe("What this idea is usually called, in a few words."),
-            plain: z.string().min(40).max(900).describe("Three or four sentences explaining the idea itself. Explain it from nothing and give one concrete example (real life or numerical). Do not talk about the code here."),
-            here: z.string().min(10).max(400).describe("One or two sentences explaining what this idea is used for in this code."),
+            plain: z.string().min(40).max(480).describe("Two or three short sentences explaining the idea itself. Explain it from nothing and give one concrete example (real life or numerical). Do not talk about the code here."),
+            here: z.string().min(10).max(220).describe("One sentence explaining what this idea is used for in this code."),
             file: z.string().max(200).optional().describe("The file where this idea is most visible, relative to the project."),
             snippet: z.string().max(1200).optional().describe("Up to ten consecutive lines from that file, copied exactly."),
             question: z.string().min(10).max(300).describe("A question that can only be answered by someone who understands the idea, and cannot be answered by someone who has only memorised the code. Answerable out loud in less than a minute."),
-            problem: z.string().min(20).max(300).optional().describe("Shown BEFORE the idea is explained: the situation that makes this idea necessary, as a difficulty the user can feel, without naming the idea. E.g. 'Requests can arrive faster than the service can handle, but short bursts are normal and should not be refused.'"),
+            problem: z.string().min(20).max(170).optional().describe("Shown BEFORE the idea is explained: the situation that makes this idea necessary, as a difficulty the user can feel, without naming the idea. E.g. 'Requests can arrive faster than the service can handle, but short bursts are normal and should not be refused.'"),
             predict: z
-              .object({ ask: z.string().min(10).max(240).describe("One concrete case to predict, with real numbers, that the format then answers."), answer: z.string().min(5).max(300) })
+              .object({ ask: z.string().min(10).max(170).describe("One concrete case to predict, with real numbers, that the format then answers."), answer: z.string().min(5).max(300) })
               .optional()
               .describe("Shown after the problem and BEFORE the format: a prediction the user commits to first. People learn more from an explanation after guessing than from reading it cold."),
             deeper: z
@@ -235,7 +236,7 @@ server.registerTool(
                 frames: z
                   .array(
                     z.object({
-                      say: z.string().min(4).max(160).describe("What happens at this step, in one sentence with the real numbers."),
+                      say: z.string().min(4).max(110).describe("What happens at this step, in one sentence with the real numbers."),
                       ask: z.string().max(160).optional().describe("On one or two steps only: a question about what the NEXT step will show. Playing stops here until the user steps on."),
                       focus: z.array(z.string().max(20)).max(4).optional().describe("Ids of the boxes this step is about; they light up and the rest fade."),
                       values: z.record(z.string().max(18)).optional().describe("New values to show inside boxes, by id. A value stays until a later step changes it."),
@@ -296,7 +297,7 @@ server.registerTool(
     // the notebook is rebuilt from every saved check, so the files in checks/ stay the only record
     const all = readdirSync(folder).filter((f) => f.endsWith(".json")).map((f) => JSON.parse(readFileSync(join(folder, f), "utf8")));
     const book = join(home(), "notebook.html");
-    writeFileSync(book, notebook(all, id, token()));
+    writeFileSync(book, build(id));
     for (const idea of kept) append("concepts.jsonl", { when: new Date().toISOString(), name: canon(idea.name), why: idea.here, where: idea.file ?? null, project: basename(cwd), cwd });
     show(process.env.KTRACE_NO_OPEN ? book : (await address()) ?? book); // served from this machine so "I'm lost here" can be recorded; the file itself if that fails
     const on = shelve(all).flatMap((s) => s.pages).find((p) => p.entries.some((e) => e.id === id));

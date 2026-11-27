@@ -4,6 +4,7 @@
 // self-contained file with nothing loaded from the network; its script only switches pages,
 // remembers the day or night choice, sends an "I'm lost here" click to ktrace and plays a
 // source video in place when asked (the one thing that then comes from the network), and without it every page is shown one after another.
+import { canon, due } from "./model.mjs";
 import { CSS as FORMATS, SCRIPT as WALKS, annotated, draw, drawMap } from "./formats.mjs";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -70,12 +71,17 @@ ${HUES.map((h, i) => `[data-hue="${i}"] { --raw: ${h}; }`).join(" ")}
 .page > header { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; padding-bottom: 6px; border-bottom: 2px solid var(--hue); }
 .page h1 { margin: 0; font-size: 24px; line-height: 1.2; font-weight: 600; letter-spacing: -0.01em; }
 .page > header p, .stamp { font-size: 12px; color: var(--soft); }
-.entry { padding-top: 12px; scroll-margin-top: 8px; }
-.entry + .entry { border-top: 1px dashed var(--line); margin-top: 18px; }
+.entry { margin-top: 0; padding-top: 10px; scroll-margin-top: 8px; }
+.entry + .entry { border-top: 1px dashed var(--line); margin-top: 10px; }
 .stamp b { color: var(--hue); }
 .summary { max-width: 90ch; font-size: 16px; }
-.idea { display: grid; gap: 8px 28px; margin-top: 14px; align-items: start; }
-.idea > * { min-width: 0; }
+.idea { margin-top: 10px; } .idea > * + * { margin-top: 6px; }
+.idea > summary { cursor: pointer; } .idea > summary h2 { display: inline; }
+.cols { display: grid; gap: 8px 28px; margin-top: 6px; align-items: start; } .cols > * { min-width: 0; }
+.more > summary { font-size: 13px; }
+.entry > summary { cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.entry[open] > summary span { display: none; }
+.entry > summary span { color: var(--ink); font-size: 14px; }
 .idea h2 { margin: 0 0 2px; font-size: 17px; line-height: 1.35; font-weight: 600; }
 .idea h2 span { margin-right: 8px; color: var(--hue); }
 .plain, .ask, .deeper p, .problem, .predict { max-width: 76ch; }
@@ -105,14 +111,17 @@ pre { margin: 0; padding: 8px 10px; font: 12.5px/1.5 var(--mono); white-space: p
 .video .still::after { content: ""; position: absolute; inset: 0; margin: auto; width: 0; height: 0; border-style: solid; border-width: 16px 0 16px 28px; border-color: transparent transparent transparent #fff; filter: drop-shadow(0 0 6px #000); }
 .video iframe { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 4px; margin-bottom: 4px; }
 .empty { padding: 48px; color: var(--soft); }
+.duelink { padding: 0 8px; border-radius: 999px; background: var(--mark); color: var(--mark-ink); text-decoration: none; font-weight: 600; }
+.due { max-width: 96ch; padding: 10px 0; border-bottom: 1px solid var(--line); scroll-margin-top: 8px; }
+.due .stamp a { color: var(--ink); font-weight: 600; }
+.grade { display: flex; gap: 6px; margin-top: 6px; font-size: 13px; color: var(--hue); font-weight: 600; }
+.grade button { padding: 1px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--pick); cursor: pointer; font-weight: 400; }
+.grade button:hover { border-color: var(--hue); }
+.later { margin-top: 12px; max-width: 96ch; font-size: 13px; color: var(--soft); }
 
 .js .page:not(.on), .js .pages .tab:not(.in) { display: none; }
 ${FORMATS}
-@media (min-width: 1280px) {
-  .idea { grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); }
-  .what { grid-area: 1 / 1 / auto / -1; } .show { grid-area: 2 / 1 / auto / -1; } .explain { grid-area: 3 / 1; } .here { grid-area: 3 / 2; } .ask { grid-area: 4 / 1; } .source { grid-area: 4 / 2; }
-  .idea.stack > * { grid-area: auto / 1 / auto / -1; }
-}
+@media (min-width: 1280px) { .cols { grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); } .stack .cols { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 860px) {
   html, body { height: auto; }
   .app { display: block; } .bar { position: sticky; top: 0; z-index: 1; }
@@ -133,7 +142,7 @@ function go(){var at=document.getElementById(location.hash.slice(1))||(location.
 all(".page").forEach(function(p){p.classList.toggle("on",p===page)});
 all(".sections .tab").forEach(function(t){t.setAttribute("aria-current",t.dataset.section===page.dataset.section)});
 all(".pages .tab").forEach(function(t){t.classList.toggle("in",t.dataset.section===page.dataset.section);t.setAttribute("aria-current",t.getAttribute("href")==="#"+page.id)});
-if(at&&at!==page)at.scrollIntoView();else document.querySelector(".canvas").scrollTop=0}
+var en=at&&at.closest("details.entry");if(en)en.open=true;if(at&&at!==page)at.scrollIntoView();else document.querySelector(".canvas").scrollTop=0}
 addEventListener("hashchange",go);go();
 var token=document.querySelector("meta[name=ktrace-token]").content,served=/^http/.test(location.protocol);
 function said(b,t){b.disabled=true;b.textContent=t}
@@ -141,6 +150,9 @@ function copy(b){var t='I am lost on "'+b.dataset.at+'" (part of "'+b.dataset.na
 (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(function(){said(b,"Copied a question for Claude: paste it in the chat.")},function(){prompt("Paste this to Claude:",t)})}
 document.addEventListener("click",function(e){var v=e.target.closest(".video .still");
 if(v&&served){e.preventDefault();var a=v.parentNode,f=document.createElement("iframe");f.src="https://www.youtube-nocookie.com/embed/"+a.dataset.video+"?autoplay=1&start="+a.dataset.start;f.allow="autoplay; encrypted-media; picture-in-picture; fullscreen";f.title="Video";a.replaceChild(f,v);return}
+var g=e.target.closest(".grade button");
+if(g){var p=g.parentNode;if(!served){p.textContent="To record how it went, open the notebook the way ktrace opens it, not as a file.";return}
+fetch("/answer",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({token:token,check:p.dataset.check,idea:+p.dataset.idea,verdict:g.dataset.verdict})}).then(function(r){p.textContent=r.ok?(g.dataset.verdict==="explained"?"Recorded. It will come back after a longer gap.":"Recorded. It will come back sooner."):"That could not be recorded."},function(){p.textContent="That could not be recorded."});return}
 var b=e.target.closest(".stuck");if(!b)return;
 if(!served)return copy(b);
 fetch("/stuck",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({token:token,check:b.dataset.check,idea:+b.dataset.idea,level:+b.dataset.level})}).then(function(r){r.ok?said(b,"Noted. Claude will go deeper on this at the end of its next turn."):copy(b)},function(){copy(b)})})})()`;
@@ -172,20 +184,28 @@ const ladder = (id, k, i, level = 1) => {
   return d ? `<details class="deeper"><summary>This rests on: <b>${esc(d.name)}</b></summary><p>${esc(d.plain)}${lost(id, k, level, i.name, d.name)}</p>${ladder(id, k, i, level + 1)}</details>` : "";
 };
 
-// An idea is laid out in the order it is best met: the problem that calls for it, a guess to
-// commit to, the picture that settles the guess, and only then the explanation and the code.
-const idea = (i, k, id) => `<section class="idea${i.snippet && i.annotations ? " stack" : ""}">
-<div class="what"><h2><span>${k + 1}</span>${esc(i.name)}</h2>
+// An idea shows little at first: the problem that calls for it, a guess to commit to, and the
+// picture that settles the guess. The words (explanation, code, what it rests on, source) are
+// folded under one line, because a page of prose is not read, and only the first idea of an
+// entry is open, so there is one thing to look at. An idea that has no problem and
+// no picture has nothing else to show, so its explanation stays open.
+const idea = (i, k, id) => {
+  const shown = draw(i);
+  return `<details class="idea${i.snippet && i.annotations ? " stack" : ""}"${k === 0 ? " open" : ""}>
+<summary><h2><span>${k + 1}</span>${esc(i.name)}</h2></summary>
 ${i.problem ? `<p class="problem">${esc(i.problem)}</p>` : ""}
-${i.predict ? `<div class="predict"><p><mark>${esc(i.predict.ask)}</mark></p><details><summary>Commit to a guess, then check</summary><p>${esc(i.predict.answer)}</p></details></div>` : ""}</div>
-${draw(i)}
+${i.predict ? `<div class="predict"><p><mark>${esc(i.predict.ask)}</mark></p><details><summary>Commit to a guess, then check</summary><p>${esc(i.predict.answer)}</p></details></div>` : ""}
+${shown}
+<details class="more"${i.problem || i.predict || shown ? "" : " open"}><summary>The explanation, the code and a question</summary><div class="cols">
 <div class="explain"><p class="plain">${esc(i.plain)}${lost(id, k, 0, i.name, i.name)}</p>
 ${ladder(id, k, i)}</div>
 <div class="here"><p><span class="tag">In this code</span> ${esc(i.here)}</p>
 ${i.snippet ? (i.annotations ? annotated(i.annotations, i.file) : `<figure class="code"><figcaption>${esc(i.file)}</figcaption><pre>${esc(i.snippet)}</pre></figure>`) : ""}</div>
 <div class="ask"><p><mark>${esc(i.question)}</mark></p>${i.answer ? `<details><summary>Say your answer first, then check</summary><p>${esc(i.answer)}</p></details>` : ""}</div>
 ${source(i.source)}
-</section>`;
+</div></details>
+</details>`;
+};
 
 /** Where a change sits, said before anything is explained: the goal, what was there, what is there now, and the parts it touched. */
 const context = (e) =>
@@ -193,14 +213,42 @@ const context = (e) =>
     ? `<dl class="context">${e.goal ? `<dt>Goal</dt><dd>${esc(e.goal)}</dd>` : ""}${e.before ? `<dt>Before</dt><dd>${esc(e.before)}</dd>` : ""}<dt>Now</dt><dd>${esc(e.summary)}</dd></dl>`
     : `<p class="summary">${esc(e.summary)}</p>`;
 
+const SHOWN = 3; // a short list gets done
+
+/**
+ * The review page: questions from earlier entries that are due to be asked again, weakest
+ * first. Recalling an idea after a gap is what keeps it, so each is answered out loud and then
+ * marked; the mark goes to ktrace, which decides when it comes round next.
+ */
+function review(checks, answers, now) {
+  const ideas = new Map();
+  for (const c of [...checks].filter((c) => c.ideas?.length).sort((a, b) => a.when.localeCompare(b.when)))
+    c.ideas.forEach((i, k) => ideas.set(canon(i.name), { skill: i.name, first: ideas.get(canon(i.name))?.first ?? c.when, check: c.id, idea: k, question: i.question, answer: i.answer, topic: topic(c) }));
+  const { today, later } = due([...ideas.values()], answers, now);
+  const soon = (d) => (d < 1.5 ? "tomorrow" : `in ${Math.round(d)} days`);
+  const item = (q) => `<section class="due">
+<p class="ask"><mark>${esc(q.question)}</mark></p>
+<p class="stamp"><a href="#${esc(q.check)}">${esc(q.skill)}</a> · ${esc(q.topic)} · ${q.answers ? `answered ${q.answers} time${q.answers === 1 ? "" : "s"}, about ${Math.round(q.known * 100)}% likely you could explain it now` : `explained ${day(q.first)}, never asked since`}</p>
+${q.answer ? `<details><summary>Say your answer first, then check</summary><p>${esc(q.answer)}</p></details>` : ""}
+<p class="grade" data-check="${esc(q.check)}" data-idea="${q.idea}"><button type="button" data-verdict="explained">Got it</button><button type="button" data-verdict="partial">Partly</button><button type="button" data-verdict="missed">Missed</button></p>
+</section>`;
+  const page = `<article class="page" id="review" data-hue="7" data-section="r">
+<header><h1>Due today</h1><p>${today.length ? `${Math.min(SHOWN, today.length)} of ${today.length} due · answer out loud, then mark how it went` : "nothing due"}</p></header>
+${today.length ? today.slice(0, SHOWN).map(item).join("\n") : `<p class="empty">Nothing is due today. Questions come back here a day after an idea is explained, and again whenever it has had time to fade.</p>`}
+${later.length ? `<p class="later">Coming up: ${later.slice(0, 6).map((q) => `${esc(q.skill)} (${soon(q.inDays)})`).join(", ")}${later.length > 6 ? `, and ${later.length - 6} more` : ""}.</p>` : ""}
+</article>`;
+  return { page, count: today.length };
+}
+
 /** The whole notebook for these checks, as HTML. `latest` is the id of the entry just added; `token` goes back with each "I'm lost here" click. */
-export function notebook(checks, latest, token = "") {
+export function notebook(checks, latest, token = "", answers = [], now = new Date()) {
   const sections = shelve(checks);
   let n = 0;
   for (const s of sections) for (const p of s.pages) p.id = `page-${++n}`;
   const count = (k, word) => `${k} ${word}${k === 1 ? "" : "s"}`;
-  const tabs = sections.map((s, i) => `<a class="tab" data-hue="${i % HUES.length}" data-section="${i}" href="#${s.pages[0].id}">${esc(s.name)}<small>${s.pages.length}</small></a>`).join("\n");
-  const pages = sections
+  const again = review(checks, answers, now);
+  const tabs = `<a class="tab" data-hue="7" data-section="r" href="#review">Review<small>${again.count}</small></a>\n` + sections.map((s, i) => `<a class="tab" data-hue="${i % HUES.length}" data-section="${i}" href="#${s.pages[0].id}">${esc(s.name)}<small>${s.pages.length}</small></a>`).join("\n");
+  const pages = `<a class="tab" data-hue="7" data-section="r" href="#review">Due today<em>${again.count} to answer</em></a>\n` + sections
     .flatMap((s, i) => s.pages.map((p) => `<a class="tab" data-hue="${i % HUES.length}" data-section="${i}" href="#${p.id}">${esc(p.title)}<em>${day(p.touched)} · ${count(p.entries.length, "entry").replace("entrys", "entries")}</em></a>`))
     .join("\n");
   const body = sections
@@ -210,12 +258,12 @@ export function notebook(checks, latest, token = "") {
 <header><h1>${esc(p.title)}</h1><p>${esc(s.name)} · started ${day(p.entries[0].when)} · ${count(p.entries.reduce((k, e) => k + e.ideas.length, 0), "idea")}</p></header>
 ${p.entries
   .map(
-    (e) => `<section class="entry${e.id === latest ? " new" : ""}" id="${esc(e.id)}">
-<p class="stamp">${e.id === latest ? "<b>New</b> · " : ""}${day(e.when)}, ${clock(e.when)}${e.lines ? ` · ${e.lines} lines` : ""}</p>
+    (e) => `<details class="entry${e.id === latest ? " new" : ""}" id="${esc(e.id)}"${e.id === latest || p.entries.length === 1 ? " open" : ""}>
+<summary class="stamp">${e.id === latest ? "<b>New</b> · " : ""}${day(e.when)}, ${clock(e.when)}${e.lines ? ` · ${e.lines} lines` : ""}<span> · ${esc(e.summary)}</span></summary>
 ${context(e)}
 ${e.map ? drawMap(e.map) : ""}
 ${e.ideas.map((x, k) => idea(x, k, e.id)).join("\n")}
-</section>`,
+</details>`,
   )
   .join("\n")}
 </article>`,
@@ -234,7 +282,7 @@ ${e.ideas.map((x, k) => idea(x, k, e.id)).join("\n")}
 </head>
 <body>
 <div class="app">
-<header class="bar"><b>ktrace notebook</b><span>${count(sections.length, "project")} · ${count(n, "page")}</span><button id="mode" type="button" hidden>Night</button></header>
+<header class="bar"><b>ktrace notebook</b><span>${count(sections.length, "project")} · ${count(n, "page")}</span>${again.count ? `<a class="duelink" href="#review">${again.count} due today</a>` : ""}<button id="mode" type="button" hidden>Night</button></header>
 <nav class="sections" aria-label="Projects"><p class="pane-title">Projects</p>
 ${tabs}
 </nav>
@@ -242,7 +290,9 @@ ${tabs}
 ${pages}
 </nav>
 <main class="canvas">
-${body || `<p class="empty">Nothing here yet. Pages appear as Claude explains the changes it makes for you.</p>`}
+${body}
+${again.page}
+${body ? "" : `<p class="empty">Nothing here yet. Pages appear as Claude explains the changes it makes for you.</p>`}
 </main>
 </div>
 <script>${SCRIPT}</script>

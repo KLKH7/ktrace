@@ -58,3 +58,14 @@ test("fitting refuses on too little data and recovers known parameters from simu
   const found = fit(answers);
   for (const k of ["init", "learn", "slip", "guess"]) assert.ok(Math.abs(found[k] - truth[k]) <= 0.1, `${k}: ${found[k]} vs ${truth[k]}`);
 });
+
+test("an idea is due a day after it is explained, and after an answer once it has had time to fade", async () => {
+  const { due } = await import("../src/model.mjs");
+  const at = (d) => new Date(Date.UTC(2026, 0, 1) + d * 86_400_000).toISOString();
+  const ideas = [{ skill: "Fresh", first: at(9.5) }, { skill: "Old", first: at(0) }, { skill: "Known", first: at(0) }, { skill: "Missed", first: at(0) }];
+  const answers = [{ when: at(9), skill: "known", verdict: "explained" }, { when: at(8), skill: "known", verdict: "explained" }, { when: at(7), skill: "missed", verdict: "missed" }];
+  const { today, later } = due(ideas, answers, new Date(at(10)));
+  assert.deepEqual(today.map((q) => q.key), ["old", "missed"], "never asked comes first, then the weakest");
+  assert.deepEqual(later.map((q) => q.key), ["fresh", "known"], "explained half a day ago is due tomorrow; well known waits longer");
+  assert.ok(later[0].inDays > 0.4 && later[0].inDays < 0.6 && later[1].inDays > 1);
+});

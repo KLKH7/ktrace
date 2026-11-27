@@ -79,6 +79,34 @@ export function trace(answers, now, p = DEFAULTS) {
 /** The skills most worth asking about again: the least known first. */
 export const weakest = (skills, n = 3) => skills.filter((s) => s.known < 0.6).slice(0, n);
 
+/** Below this chance of explaining it today, an idea is worth asking about again. */
+export const DUE_BELOW = 0.6;
+
+/**
+ * Which ideas to ask about today, and when the rest come round. `ideas` are `{ skill, first }`:
+ * each idea's name and when it was first explained. An idea never answered is due a day after
+ * it was explained, because recalling it after a gap is what makes it stick. One that has been
+ * answered is due once its chance has faded below DUE_BELOW, and not on the day it was answered.
+ * Returns `{ today, later }`: today weakest first, later soonest first, each with `inDays`.
+ */
+export function due(ideas, answers, now, p = DEFAULTS) {
+  const traced = new Map(trace(answers, now, p).map((s) => [s.skill, s]));
+  const [today, later] = [[], []];
+  for (const idea of ideas) {
+    const skill = canon(idea.skill);
+    const s = traced.get(skill);
+    const since = (now.getTime() - Date.parse(s ? s.last : idea.first)) / DAY;
+    // days until the chance fades to the line: known * 2^(-t / halfLife) = DUE_BELOW
+    const fade = s && s.known > DUE_BELOW ? s.halfLife * Math.log2(s.known / DUE_BELOW) : 0;
+    const inDays = Math.max(fade, 1 - since);
+    const row = { ...idea, key: skill, known: s?.known ?? null, answers: s?.answers ?? 0, last: s?.last ?? null, inDays: Math.max(0, inDays) };
+    (inDays <= 0 ? today : later).push(row);
+  }
+  today.sort((a, b) => (a.known ?? -1) - (b.known ?? -1) || a.first.localeCompare(b.first));
+  later.sort((a, b) => a.inDays - b.inDays);
+  return { today, later };
+}
+
 /** How well the parameters predict a set of answers (higher is better). Forgetting is left out so the four tracing numbers are fitted on their own. */
 export function logLikelihood(answers, p, sorted = false) {
   const known = new Map();
