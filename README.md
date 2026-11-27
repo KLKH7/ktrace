@@ -12,12 +12,23 @@ five tools so that changes, without slowing the work:
 | `what_i_know` | Reads what you can and can't explain today, so it pitches explanations to you. |
 | `record_answer` | When it asks you something in the chat and you answer, it keeps the result. |
 | `suggest_next` | Proposes the one paper, talk or post just beyond what you built. |
-| `explain_change` | Opens a page that teaches the two or three ideas behind what it just wrote. |
+| `explain_change` | Adds the two or three ideas behind what it just wrote to your notebook, and opens it. |
 
-**After a change, a page opens.** Once the agent has written about forty lines, it is asked to
-explain them before it stops. The page gives a two-sentence summary, then each idea in plain
-words with one example, the lines of your code that use it, one source, and a question to try
-out loud. The agent writes it in the session you already have, so there is no second sign-in
+**After a change, your notebook opens.** Once the agent has written about forty lines, it is
+asked to explain them before it stops. The notebook has a section for each project and a page
+for each topic; a change on a topic you already have is added to that page. Each entry gives a
+two-sentence summary, then each idea in plain words with one example, the lines of your code
+that use it, one source with a diagram taken from inside it, and a question to try out loud
+with an answer hidden until you ask. The agent can also show an idea in the one format that suits
+it: a worked example in numbered steps, the code with a note beside each group of lines, two
+cases side by side, or a diagram of boxes and arrows that ktrace draws from a list.
+
+**When you are lost, you click instead of asking again.** Under each idea is the chain it rests
+on, folded shut: open it one level at a time until it makes sense. Every level has an "I'm lost
+here" link. Click it and, at the end of its next turn, the agent explains only that point, from
+one level further back, on the same page. For this the notebook is served from your own machine
+(`127.0.0.1`, nowhere else); opened as a file, the link copies the question for you to paste. It
+has a day and a night mode. The agent writes it in the session you already have, so there is no second sign-in
 and no API key. It happens at most once every twenty minutes.
 
 Two things make it more than a notes file:
@@ -42,7 +53,7 @@ This adds the server, and a hook that runs when the agent finishes a turn
 ([`src/hook.mjs`](src/hook.mjs)). It works the same in the terminal and in the desktop app.
 Your Claude Code settings file is backed up beside itself first.
 
-Start a new Claude Code session and build something. A page opens after the first substantial
+Start a new Claude Code session and build something. Your notebook opens after the first substantial
 change. To pause the pages, `touch ~/.ktrace/off`; delete that file to resume. Later:
 
 ```bash
@@ -67,8 +78,9 @@ To remove it: `npx -y github:KLKH7/ktrace uninstall`.
 ## What it keeps, and where
 
 Plain files in `~/.ktrace` on your machine: your answers, the ideas the agent
-noted, the reading list, and each page with the explanation behind it (`checks/`). Nothing is uploaded. The only network use is checking a suggested
-source at arXiv, YouTube or its own page. There is no account and no telemetry.
+noted, the reading list, each explanation (`checks/`) and the notebook built from them
+(`notebook.html`). Nothing is uploaded. The only network use is checking a suggested
+source at arXiv, YouTube or its own page, and fetching one diagram from it. There is no account and no telemetry.
 
 ## How it compares
 

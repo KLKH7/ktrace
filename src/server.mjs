@@ -2,13 +2,16 @@
 // build, without slowing it. Everything is kept on this machine (see home() in store.mjs); the
 // only network use is checking a suggested source at arXiv, YouTube or its own page.
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { canon, trace } from "./model.mjs";
-import { page } from "./page.mjs";
+import { figure } from "./figure.mjs";
+import { KINDS, check as format } from "./formats.mjs";
+import { notebook, shelve } from "./notebook.mjs";
+import { address, token } from "./web.mjs";
 import { append, home, lines, reading, saveReading } from "./store.mjs";
 import { verify } from "./verify.mjs";
 
@@ -66,12 +69,14 @@ server.registerTool(
     const skills = trace(answers, new Date()).filter((s) => has(s.skill));
     const open = unasked(answers).filter((c) => has(c.name)).slice(0, 15);
     const unread = reading().filter((r) => !r.done && has(r.title)).slice(0, 8).map((r) => `- ${r.title} (${r.kind}, ${r.minutes} min)`);
-    if (!skills.length && !open.length && !unread.length) return text(topic ? `Nothing recorded about "${topic}" yet. Assume no prior knowledge of it has been shown.` : "Nothing recorded yet. Assume nothing; explain plainly.");
+    const lost = [...new Map(lines("stuck.jsonl").filter((s) => has(s.at) || has(s.name)).map((s) => [s.at, s])).values()].slice(-6).map((s) => `- ${s.at}${s.at === s.name ? "" : ` (part of ${s.name})`}, ${s.when.slice(0, 10)}`);
+    if (!skills.length && !open.length && !unread.length && !lost.length) return text(topic ? `Nothing recorded about "${topic}" yet. Assume no prior knowledge of it has been shown.` : "Nothing recorded yet. Assume nothing; explain plainly.");
     const rows = skills.map((s) => `- ${s.skill}: ${percent(s.known)} (${s.answers} answers, last ${s.last.slice(0, 10)})`);
     const ideas = open.map((c) => `- ${c.name}${c.where ? ` (${c.where})` : ""}: ${c.why}`);
     return text(
       [
         skills.length ? `Skills, weakest first (estimated chance they can explain it today):\n${rows.join("\n")}` : "No skills tested yet.",
+        lost.length ? `Where they clicked "I'm lost here" in their notebook (start explanations of these from further back):\n${lost.join("\n")}` : "",
         open.length ? `Used in their projects but never asked about:\n${ideas.join("\n")}` : "",
         unread.length ? `Already on their reading list, unread (do not suggest again):\n${unread.join("\n")}` : "",
       ].filter(Boolean).join("\n\n"),
@@ -130,15 +135,35 @@ function show(path) {
   spawn(command, args, { detached: true, stdio: "ignore" }).on("error", () => {}).unref();
 }
 
+/**
+ * The folders a snippet's file may be named from. The agent may give a path from where the
+ * server started, from where it was working when the hook counted its lines, or from a project
+ * root a few folders above that, so each is tried.
+ */
+function roots(worked) {
+  const out = [cwd];
+  for (let dir = worked, up = 0; dir && up < 4 && dir !== dirname(dir); dir = dirname(dir), up++) out.push(dir);
+  return [...new Set(out)];
+}
+
+/** Whether `file`, named from `root` and staying inside it, contains the snippet. */
+function holds(root, file, snippet) {
+  const path = resolve(root, file);
+  return path.startsWith(root + sep) && existsSync(path) && statSync(path).isFile() && squash(readFileSync(path, "utf8")).includes(squash(snippet));
+}
+
 server.registerTool(
   "explain_change",
   {
     description:
-      "Open a page that teaches the user the ideas behind code you just wrote for them. They did not write it and may not know the ideas in it. " +
+      "Add an entry to the user's notebook that teaches the ideas behind code you just wrote for them, and open it. They did not write it and may not know the ideas in it. " +
+      "The notebook has a section for each project and a page for each topic: a change on a topic that already has a page is added to that page. " +
       "Write for a bright second-year university student: simple words, short sentences, no unexplained jargon, no praise, no waste. " +
-      "Each source is checked where it claims to live and dropped if it does not match; each snippet is checked against the file and dropped if it is not there.",
+      "Besides the prose, give each idea at most ONE format (steps, annotations, contrast or diagram), the one that suits it; a second is ignored, and an idea that needs none can go without. " +
+      "Each source is checked where it claims to live and dropped if it does not match, and a diagram is taken from inside it when it has one; each snippet is checked against the file and dropped if it is not there.",
     inputSchema: {
       check: z.string().max(40).optional().describe("The check id, when a ktrace message gave you one."),
+      topic: z.string().min(2).max(60).optional().describe("The notebook page this belongs on: the subject in two to four words, e.g. 'Rate limiting'. Reuse the exact name of an existing page when the change continues that subject; give a new name only for a new subject."),
       summary: z.string().min(20).max(500).describe("Two sentences. What did this change create that didn't exist before? Why was it necessary? Don't list files."),
       ideas: z
         .array(
@@ -149,8 +174,49 @@ server.registerTool(
             file: z.string().max(200).optional().describe("The file where this idea is most visible, relative to the project."),
             snippet: z.string().max(1200).optional().describe("Up to ten consecutive lines from that file, copied exactly."),
             question: z.string().min(10).max(300).describe("A question that can only be answered by someone who understands the idea, and cannot be answered by someone who has only memorised the code. Answerable out loud in less than a minute."),
+            deeper: z
+              .array(z.object({ name: z.string().min(2).max(80).describe("What this is usually called."), plain: z.string().min(30).max(500).describe("Two or three sentences from nothing, with one tiny example.") }))
+              .min(1)
+              .max(3)
+              .optional()
+              .describe("What this idea rests on, nearest first: each is the thing someone must already understand to follow the one before it. The user opens these one at a time only when lost, so that they do not have to ask. Give it for every idea that is not elementary."),
+            answer: z.string().min(10).max(400).optional().describe("A good answer to the question, in two or three sentences. It stays hidden until the user asks to see it."),
+            steps: z
+              .object({
+                given: z.string().max(200).optional().describe("The starting values of the example, e.g. 'Capacity 3, refill 1 token per second, bucket full.'"),
+                steps: z.array(z.object({ label: z.string().max(40).describe("What happens, in a few words."), detail: z.string().max(200).describe("The values after it happens, with real numbers.") })).min(2).max(7),
+                result: z.string().max(200).optional().describe("What the example shows, in one sentence."),
+              })
+              .optional()
+              .describe("FORMAT, for a procedure or algorithm: one small example worked through step by step with real numbers."),
+            annotations: z
+              .array(z.object({ code: z.string().max(400).describe("One to four consecutive lines copied exactly from the snippet."), note: z.string().max(200).describe("What these lines are for, in one sentence.") }))
+              .min(2)
+              .max(5)
+              .optional()
+              .describe("FORMAT, for an idea you can point to in the lines: the snippet cut into groups, in order, each with a note on what it is for. Needs snippet."),
+            contrast: z
+              .object({
+                without: z.object({ title: z.string().max(60), body: z.string().max(300), code: z.string().max(400).optional() }).describe("The case without the idea, or the common mistake."),
+                with: z.object({ title: z.string().max(60), body: z.string().max(300), code: z.string().max(400).optional() }).describe("The same case with the idea."),
+                point: z.string().max(200).optional().describe("The one difference that matters, in one sentence."),
+              })
+              .optional()
+              .describe("FORMAT, for a design choice or a common mistake: two cases side by side that differ in one thing."),
+            diagram: z
+              .object({
+                nodes: z.array(z.object({ id: z.string().max(20), label: z.string().max(44).describe("Two to five words.") })).min(2).max(8),
+                edges: z.array(z.object({ from: z.string().max(20), to: z.string().max(20), label: z.string().max(24).optional() })).min(1).max(12),
+                caption: z.string().max(200).optional(),
+              })
+              .optional()
+              .describe("FORMAT, for a system, a flow or a set of states: boxes and the arrows between them, drawn left to right. Do not draw the page yourself."),
             source: z
-              .object({ title: z.string().max(200).describe("The title exactly as the source displays it."), url: z.string().max(400).describe("An arxiv.org/abs address, a YouTube link, or the canonical documentation page.") })
+              .object({
+                title: z.string().max(200).describe("The title exactly as the source displays it."),
+                url: z.string().max(400).describe("An arxiv.org/abs address, a YouTube link, or the canonical documentation page."),
+                figure: z.string().max(120).optional().describe("A few words naming the diagram in this source that best shows the idea, e.g. 'broadcasting two arrays'. The server looks inside the source for it and puts it on the page."),
+              })
               .optional()
               .describe("The single best source for understanding this idea: the original paper, a widely known explainer video or lecture, or the canonical documentation page. Only name one you are sure exists at that address; leave it out if unsure."),
           }),
@@ -160,30 +226,41 @@ server.registerTool(
         .describe("The two or three ideas that need to be understood to really understand this change. Things that exist outside this code (an algorithm, a statistical method, a protocol, a pattern, a piece of maths), not a description of a file. Most important first."),
     },
   },
-  async ({ check, summary, ideas }) => {
+  async ({ check, topic, summary, ideas }) => {
     const folder = join(home(), "checks");
     mkdirSync(folder, { recursive: true });
     const id = check && /^c_[a-z0-9]+$/.test(check) ? check : `c_${Date.now().toString(36)}`;
     const saved = existsSync(join(folder, `${id}.json`)) ? JSON.parse(readFileSync(join(folder, `${id}.json`), "utf8")) : { id, when: new Date().toISOString(), project: basename(cwd), cwd };
     const dropped = [];
     const kept = await Promise.all(
-      ideas.map(async ({ source, file, snippet, ...idea }) => {
+      ideas.map(async ({ source, file, snippet, steps, annotations, contrast, diagram, ...idea }) => {
         const out = { ...idea };
-        const path = file ? resolve(cwd, file) : null;
-        if (snippet && path?.startsWith(cwd) && existsSync(path) && squash(readFileSync(path, "utf8")).includes(squash(snippet))) Object.assign(out, { file, snippet });
+        if (snippet && file && roots(saved.cwd).some((root) => holds(root, file, snippet))) Object.assign(out, { file, snippet });
         else if (snippet) dropped.push(`the snippet for "${idea.name}" (not found in ${file ?? "any file"})`);
+        const shown = format({ steps, annotations, contrast, diagram }, out.snippet);
+        if (shown?.kind) out[shown.kind] = shown.data;
+        else if (shown) dropped.push(`the ${KINDS.find((k) => ({ steps, annotations, contrast, diagram })[k])} for "${idea.name}" (${shown.reason})`);
         const checked = source ? await verify(source) : null;
-        if (checked?.ok) out.source = { title: checked.title, url: checked.url, by: checked.authors.slice(0, 2).join(", "), year: checked.year };
+        if (checked?.ok) {
+          out.source = { title: checked.title, url: checked.url, by: checked.authors.slice(0, 2).join(", "), year: checked.year };
+          const found = await figure({ url: checked.url, wanted: [source.figure, idea.name].filter(Boolean).join(" ") });
+          if (found) out.source.figure = { src: found.src, caption: found.caption, from: found.from };
+        }
         else if (source) dropped.push(`the source for "${idea.name}" (${checked.reason})`);
         return out;
       }),
     );
-    const done = { ...saved, summary, ideas: kept };
+    const done = { ...saved, ...(topic ? { topic: topic.trim() } : {}), summary, ideas: kept };
     writeFileSync(join(folder, `${id}.json`), JSON.stringify(done, null, 2));
-    writeFileSync(join(folder, `${id}.html`), page(done));
+    // the notebook is rebuilt from every saved check, so the files in checks/ stay the only record
+    const all = readdirSync(folder).filter((f) => f.endsWith(".json")).map((f) => JSON.parse(readFileSync(join(folder, f), "utf8")));
+    const book = join(home(), "notebook.html");
+    writeFileSync(book, notebook(all, id, token()));
     for (const idea of kept) append("concepts.jsonl", { when: new Date().toISOString(), name: canon(idea.name), why: idea.here, where: idea.file ?? null, project: basename(cwd), cwd });
-    show(join(folder, `${id}.html`));
-    return text(`The page is open in their browser (${join(folder, `${id}.html`)}).${dropped.length ? ` Left out because they did not check out: ${dropped.join("; ")}.` : ""} Tell the user in one short line that the ideas behind this change are open in their browser. Do not repeat the explanation.`);
+    show(process.env.KTRACE_NO_OPEN ? book : (await address()) ?? book); // served from this machine so "I'm lost here" can be recorded; the file itself if that fails
+    const on = shelve(all).flatMap((s) => s.pages).find((p) => p.entries.some((e) => e.id === id));
+    const where = on.entries.length > 1 ? `added to the page "${on.title}", which now has ${on.entries.length} entries` : `on a new page, "${on.title}"`;
+    return text(`The notebook is open in their browser (${book}), with this change ${where}.${dropped.length ? ` Left out because they did not check out: ${dropped.join("; ")}.` : ""} Tell the user in one short line that the ideas behind this change are open in their notebook. Do not repeat the explanation.`);
   },
 );
 

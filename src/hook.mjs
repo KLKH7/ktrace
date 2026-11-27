@@ -2,12 +2,12 @@
 // Claude Code "Stop" hook. When Claude finishes a turn, this adds up what it has written in the
 // session since the last check. Once that is enough to be worth understanding, it asks Claude
 // to do one more thing before stopping: explain the change through the explain_change tool,
-// which opens a page of the ideas behind it. Claude writes the explanation itself, in the
+// which adds the ideas behind it to their notebook and opens it. Claude writes the explanation itself, in the
 // session it already has, so nothing else has to be signed in or paid for.
 //
 // This file uses only Node's own modules, because `install` copies it to ~/.ktrace/hook.mjs.
 //   pause: touch ~/.ktrace/off      tune: KTRACE_MIN_LINES (40), KTRACE_COOLDOWN_MIN (20)
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, readSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -73,6 +73,38 @@ function readFrom(path, start, end) {
   return buf.toString("utf8");
 }
 
+/** The notebook pages this project already has, so a change on an old subject is added to its page. */
+function pages(project) {
+  const names = new Map();
+  for (const file of readdirSync(join(HOME, "checks")).filter((f) => f.endsWith(".json"))) {
+    try {
+      const check = JSON.parse(readFileSync(join(HOME, "checks", file), "utf8"));
+      const name = check.topic?.trim() || check.ideas?.[0]?.name;
+      if (check.project === project && check.ideas?.length && name) names.set(name.toLowerCase(), name);
+    } catch {
+      /* a half-written file */
+    }
+  }
+  return [...names.values()].slice(-20);
+}
+
+/**
+ * Places in the notebook where the user clicked "I'm lost here" since the last time one was passed
+ * on. The words come from ktrace's own saved checks, never from the click.
+ */
+function lost(since) {
+  const file = join(HOME, "stuck.jsonl");
+  if (!existsSync(file)) return [];
+  const rows = readFileSync(file, "utf8").split("\n").filter(Boolean).flatMap((l) => {
+    try {
+      return [JSON.parse(l)];
+    } catch {
+      return [];
+    }
+  });
+  return rows.filter((r) => r.when > since);
+}
+
 /** What to print for Claude Code: nothing, or the request that keeps Claude going for one more step. */
 export function decide(input, now = Date.now()) {
   const { session_id: session, transcript_path: transcript, cwd = process.cwd() } = input;
@@ -81,6 +113,22 @@ export function decide(input, now = Date.now()) {
   mkdirSync(join(HOME, "checks"), { recursive: true });
   const statePath = join(HOME, "state.json");
   const state = existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")) : { sessions: {}, lastAsked: 0 };
+  // a click on "I'm lost here" comes first: it is the user asking, and it does not wait for new code
+  const clicks = lost(state.stuckSeen ?? "");
+  if (clicks.length) {
+    const at = clicks.at(-1);
+    const id = `c_${now.toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    writeFileSync(join(HOME, "checks", `${id}.json`), JSON.stringify({ id, when: new Date(now).toISOString(), project: at.project, cwd, topic: at.topic, follows: at.check }, null, 2));
+    writeFileSync(statePath, JSON.stringify({ ...state, stuckSeen: at.when }));
+    return {
+      decision: "block",
+      reason:
+        `ktrace: in their notebook the user clicked "I'm lost here" on "${at.at}"${at.at === at.name ? "" : `, part of "${at.name}"`}. ` +
+        `Before you stop, call the ktrace tool explain_change once, with check "${id}" and topic "${at.topic}". Explain only "${at.at}", starting one level further back than last time: ` +
+        "one or two ideas, each from nothing, with a worked example in steps and what it rests on in deeper. Do not explain the rest again. " +
+        "Then end with one short line telling them it has been added to that page of their notebook, and stop. If you do not have that tool, just stop.",
+    };
+  }
   const size = statSync(transcript).size;
   const from = Math.min(state.sessions[session] ?? Math.max(0, size - FIRST_READ), size);
   const files = collect(readFrom(transcript, from, size));
@@ -88,16 +136,18 @@ export function decide(input, now = Date.now()) {
   // not enough yet, or asked too recently: leave the mark where it is so the work accumulates
   if (lines < MIN_LINES || now - state.lastAsked < COOLDOWN_MS) return null;
 
+  const has = pages(basename(cwd));
   const id = `c_${now.toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const shown = files.slice(0, 12).map((f) => ({ path: f.path.startsWith(cwd + "/") ? relative(cwd, f.path) : f.path.replace(homedir(), "~"), lines: f.lines }));
   writeFileSync(join(HOME, "checks", `${id}.json`), JSON.stringify({ id, when: new Date(now).toISOString(), project: basename(cwd), cwd, lines, files: shown }, null, 2));
-  writeFileSync(statePath, JSON.stringify({ sessions: { ...state.sessions, [session]: size }, lastAsked: now }));
+  writeFileSync(statePath, JSON.stringify({ ...state, sessions: { ...state.sessions, [session]: size }, lastAsked: now }));
   return {
     decision: "block",
     reason:
       `ktrace: you have written ${lines} lines here (${shown.slice(0, 4).map((f) => f.path).join(", ")}) and the user has not been shown the ideas behind them. ` +
-      `Before you stop, call the ktrace tool explain_change once, with check "${id}". It opens a page for them. ` +
-      "Then end with one short line telling them the page is open, and stop. Do not repeat the explanation in the chat. If you do not have that tool, just stop.",
+      `Before you stop, call the ktrace tool explain_change once, with check "${id}". It adds the explanation to their notebook and opens it. ` +
+      (has.length ? `Pages this project already has: ${has.map((n) => `"${n}"`).join(", ")}. Pass one of those names as topic if this change continues it; otherwise pass a new topic of two to four words. ` : "Pass a topic of two to four words: it names the notebook page. ") +
+      "Then end with one short line telling them the notebook is open, and stop. Do not repeat the explanation in the chat. If you do not have that tool, just stop.",
   };
 }
 

@@ -72,5 +72,5 @@ if (command === "serve") {
     for (const r of unread) console.log(`  ${r.title} (${r.minutes} min)\n    ${r.why}\n    ${r.url}`);
   }
 } else {
-  console.log("ktrace: understand what your coding agent builds for you.\n\n  install     add it to Claude Code (the server, and the hook that opens a page after a change)\n  uninstall   remove it\n  map         what you can explain today, and what to read next\n  serve       run the MCP server");
+  console.log("ktrace: understand what your coding agent builds for you.\n\n  install     add it to Claude Code (the server, and the hook that opens your notebook after a change)\n  uninstall   remove it\n  map         what you can explain today, and what to read next\n  serve       run the MCP server");
 }
