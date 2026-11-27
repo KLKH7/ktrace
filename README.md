@@ -27,7 +27,11 @@ cases side by side, or a diagram of boxes and arrows that ktrace draws from a li
 on, folded shut: open it one level at a time until it makes sense. Every level has an "I'm lost
 here" link. Click it and, at the end of its next turn, the agent explains only that point, from
 one level further back, on the same page. For this the notebook is served from your own machine
-(`127.0.0.1`, nowhere else); opened as a file, the link copies the question for you to paste. It
+(`127.0.0.1`, nowhere else); opened as a file, the link copies the question for you to paste.
+
+**A video source plays inside the notebook.** When the best source for an idea is a YouTube
+video, it is shown as its still frame; click it and it plays in place, from the minute that
+matters when the agent gave one. Nothing is fetched from YouTube until you click. It
 has a day and a night mode. The agent writes it in the session you already have, so there is no second sign-in
 and no API key. It happens at most once every twenty minutes.
 

@@ -214,7 +214,8 @@ server.registerTool(
             source: z
               .object({
                 title: z.string().max(200).describe("The title exactly as the source displays it."),
-                url: z.string().max(400).describe("An arxiv.org/abs address, a YouTube link, or the canonical documentation page."),
+                url: z.string().max(400).describe("An arxiv.org/abs address, a YouTube link, or the canonical documentation page. A YouTube video is played inside the notebook, so prefer one when a well-known video explains the idea step by step."),
+                start: z.string().regex(/^(\d{1,2}:)?\d{1,2}:\d{2}$|^\d{1,5}$/).optional().describe("For a video: where the part about this idea begins, as m:ss or seconds. Leave it out unless you are sure; the video then plays from the start."),
                 figure: z.string().max(120).optional().describe("A few words naming the diagram in this source that best shows the idea, e.g. 'broadcasting two arrays'. The server looks inside the source for it and puts it on the page."),
               })
               .optional()
@@ -243,6 +244,7 @@ server.registerTool(
         const checked = source ? await verify(source) : null;
         if (checked?.ok) {
           out.source = { title: checked.title, url: checked.url, by: checked.authors.slice(0, 2).join(", "), year: checked.year };
+          if (source.start) out.source.start = source.start.split(":").reduce((total, part) => total * 60 + Number(part), 0);
           const found = await figure({ url: checked.url, wanted: [source.figure, idea.name].filter(Boolean).join(" ") });
           if (found) out.source.figure = { src: found.src, caption: found.caption, from: found.from };
         }

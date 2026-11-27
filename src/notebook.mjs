@@ -2,7 +2,8 @@
 // Sections are projects, pages are topics, and each change is an entry added to its topic's
 // page, so a topic that comes up again grows one page instead of starting another. One
 // self-contained file with nothing loaded from the network; its script only switches pages,
-// remembers the day or night choice and sends an "I'm lost here" click to ktrace, and without it every page is shown one after another.
+// remembers the day or night choice, sends an "I'm lost here" click to ktrace and plays a
+// source video in place when asked (the one thing that then comes from the network), and without it every page is shown one after another.
 import { CSS as FORMATS, annotated, draw } from "./formats.mjs";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -94,6 +95,11 @@ pre { margin: 0; padding: 8px 10px; font: 12.5px/1.5 var(--mono); white-space: p
 .source:hover b { text-decoration: underline; }
 .source img { flex: none; width: 96px; max-height: 64px; object-fit: contain; background: #fff; border: 1px solid var(--line); border-radius: 3px; }
 .source small { color: var(--soft); }
+.video { display: block; max-width: 560px; }
+.video .still { position: relative; display: block; aspect-ratio: 16 / 9; margin-bottom: 4px; border-radius: 4px; overflow: hidden; background: #000; }
+.video .still img { width: 100%; height: 100%; max-height: none; object-fit: cover; border: 0; border-radius: 0; }
+.video .still::after { content: ""; position: absolute; inset: 0; margin: auto; width: 0; height: 0; border-style: solid; border-width: 16px 0 16px 28px; border-color: transparent transparent transparent #fff; filter: drop-shadow(0 0 6px #000); }
+.video iframe { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 4px; margin-bottom: 4px; }
 .empty { padding: 48px; color: var(--soft); }
 
 .js .page:not(.on), .js .pages .tab:not(.in) { display: none; }
@@ -129,14 +135,29 @@ var token=document.querySelector("meta[name=ktrace-token]").content,served=/^htt
 function said(b,t){b.disabled=true;b.textContent=t}
 function copy(b){var t='I am lost on "'+b.dataset.at+'" (part of "'+b.dataset.name+'"). Explain only that, one level more basic, with one worked example.';
 (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(function(){said(b,"Copied a question for Claude: paste it in the chat.")},function(){prompt("Paste this to Claude:",t)})}
-document.addEventListener("click",function(e){var b=e.target.closest(".stuck");if(!b)return;
+document.addEventListener("click",function(e){var v=e.target.closest(".video .still");
+if(v&&served){e.preventDefault();var a=v.parentNode,f=document.createElement("iframe");f.src="https://www.youtube-nocookie.com/embed/"+a.dataset.video+"?autoplay=1&start="+a.dataset.start;f.allow="autoplay; encrypted-media; picture-in-picture; fullscreen";f.title="Video";a.replaceChild(f,v);return}
+var b=e.target.closest(".stuck");if(!b)return;
 if(!served)return copy(b);
 fetch("/stuck",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({token:token,check:b.dataset.check,idea:+b.dataset.idea,level:+b.dataset.level})}).then(function(r){r.ok?said(b,"Noted. Claude will go deeper on this at the end of its next turn."):copy(b)},function(){copy(b)})})})()`;
 
+const video = (url) => url.match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/)([\w-]{11})/)?.[1];
+const minutes = (t) => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+
+/**
+ * The source of an idea. A video is shown as its still with a play mark: a click plays it in
+ * place from the moment that matters, when the notebook is served; as a file it opens YouTube.
+ */
 function source(s) {
   if (!s) return "";
   const by = [s.by, s.year, host(s.url)].filter(Boolean).join(" · ");
-  return `<a class="source" href="${esc(s.url)}">${s.figure?.src ? `<img src="${esc(s.figure.src)}" alt="${esc(s.figure.caption || "")}">` : ""}<span><span class="tag">${kind(s.url)} next</span> <b>${esc(s.title)}</b> <small>${esc(by)}</small></span></a>`;
+  const id = video(s.url);
+  const said = `<span><span class="tag">${kind(s.url)} next</span> <b>${esc(s.title)}</b> <small>${esc(by)}${id && s.start ? ` · from ${minutes(s.start)}` : ""}</small></span>`;
+  if (id) {
+    const href = `https://www.youtube.com/watch?v=${id}${s.start ? `&t=${s.start}s` : ""}`;
+    return `<a class="source video" href="${esc(href)}" data-video="${id}" data-start="${s.start ?? 0}"><span class="still">${s.figure?.src ? `<img src="${esc(s.figure.src)}" alt="">` : ""}</span>${said}</a>`;
+  }
+  return `<a class="source" href="${esc(s.url)}">${s.figure?.src ? `<img src="${esc(s.figure.src)}" alt="${esc(s.figure.caption || "")}">` : ""}${said}</a>`;
 }
 
 const lost = (id, k, level, name, at) => `<button class="stuck" type="button" data-check="${esc(id)}" data-idea="${k}" data-level="${level}" data-name="${esc(name)}" data-at="${esc(at)}">I'm lost here</button>`;
