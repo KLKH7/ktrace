@@ -2,7 +2,7 @@
 // Sections are projects, pages are topics, and each change is an entry added to its topic's
 // page, so a topic that comes up again grows one page instead of starting another. One
 // self-contained file with nothing loaded from the network; its script only switches pages,
-// remembers the day or night choice, sends an "I'm lost here" click to ktrace and plays a
+// remembers the day or night choice and how much detail to show, sends an "I'm lost here" click to ktrace and plays a
 // source video in place when asked (the one thing that then comes from the network), and without it every page is shown one after another.
 import { canon, due } from "./model.mjs";
 import { CSS as FORMATS, SCRIPT as WALKS, annotated, draw, drawMap } from "./formats.mjs";
@@ -54,7 +54,9 @@ ${HUES.map((h, i) => `[data-hue="${i}"] { --raw: ${h}; }`).join(" ")}
 .app { display: grid; grid-template: "bar bar bar" auto "sections pages canvas" minmax(0, 1fr) / 180px 220px minmax(0, 1fr); height: 100%; }
 .bar { grid-area: bar; display: flex; align-items: center; gap: 10px; padding: 6px 14px; background: var(--pane); border-bottom: 1px solid var(--line); font-size: 13px; }
 .bar span { color: var(--soft); }
-#mode { margin-left: auto; padding: 2px 10px; border-radius: 4px; border: 1px solid var(--line); background: var(--pick); cursor: pointer; }
+#detail { margin-left: auto; } #detail + #mode { margin-left: 0; }
+[data-detail="brief"] .explain:not(.only) { display: none; }
+#detail, #mode { padding: 2px 10px; border-radius: 4px; border: 1px solid var(--line); background: var(--pick); cursor: pointer; }
 .sections, .pages { overflow-y: auto; padding: 8px 6px; border-right: 1px solid var(--line); font-size: 14px; }
 .sections { grid-area: sections; background: var(--pane); } .pages { grid-area: pages; background: var(--pane2); }
 .pane-title { margin: 2px 8px 4px; font-size: 11px; font-weight: 600; color: var(--soft); }
@@ -143,6 +145,12 @@ all(".page").forEach(function(p){p.classList.toggle("on",p===page)});
 all(".sections .tab").forEach(function(t){t.setAttribute("aria-current",t.dataset.section===page.dataset.section)});
 all(".pages .tab").forEach(function(t){t.classList.toggle("in",t.dataset.section===page.dataset.section);t.setAttribute("aria-current",t.getAttribute("href")==="#"+page.id)});
 var en=at&&at.closest("details.entry");if(en)en.open=true;if(at&&at!==page)at.scrollIntoView();else document.querySelector(".canvas").scrollTop=0}
+var levels=["brief","normal","full"],names={brief:"Brief",normal:"Normal",full:"Full"},d=document.getElementById("detail"),level="normal";
+try{var kept=localStorage.getItem("ktrace-detail");if(levels.indexOf(kept)>=0)level=kept}catch(e){}
+function detail(){r.dataset.detail=level;d.textContent="Detail: "+names[level];
+all(".entry").forEach(function(en){var first=en.querySelector("details.idea");all("details.idea").filter(function(x){return x.parentNode===en}).forEach(function(x){x.open=level!=="brief"||x===first})});
+all("details.more").forEach(function(x){x.open=level==="full"})}
+d.hidden=false;d.onclick=function(){level=levels[(levels.indexOf(level)+1)%3];try{localStorage.setItem("ktrace-detail",level)}catch(e){}detail()};detail();
 addEventListener("hashchange",go);go();
 var token=document.querySelector("meta[name=ktrace-token]").content,served=/^http/.test(location.protocol);
 function said(b,t){b.disabled=true;b.textContent=t}
@@ -184,21 +192,21 @@ const ladder = (id, k, i, level = 1) => {
   return d ? `<details class="deeper"><summary>This rests on: <b>${esc(d.name)}</b></summary><p>${esc(d.plain)}${lost(id, k, level, i.name, d.name)}</p>${ladder(id, k, i, level + 1)}</details>` : "";
 };
 
-// An idea shows little at first: the problem that calls for it, a guess to commit to, and the
-// picture that settles the guess. The words (explanation, code, what it rests on, source) are
-// folded under one line, because a page of prose is not read, and only the first idea of an
-// entry is open, so there is one thing to look at. An idea that has no problem and
-// no picture has nothing else to show, so its explanation stays open.
+// An idea is laid out in the order it is best met: the problem that calls for it, a guess to
+// commit to, the picture that settles the guess, then the explanation in a few words. The code,
+// the closing question and the source are folded under one line. How much is open is the
+// reader's choice (Brief, Normal or Full in the top bar): Brief shows one idea and no
+// explanation unless it is all an idea has, Full opens everything.
 const idea = (i, k, id) => {
   const shown = draw(i);
-  return `<details class="idea${i.snippet && i.annotations ? " stack" : ""}"${k === 0 ? " open" : ""}>
+  return `<details class="idea${i.snippet && i.annotations ? " stack" : ""}" open>
 <summary><h2><span>${k + 1}</span>${esc(i.name)}</h2></summary>
 ${i.problem ? `<p class="problem">${esc(i.problem)}</p>` : ""}
 ${i.predict ? `<div class="predict"><p><mark>${esc(i.predict.ask)}</mark></p><details><summary>Commit to a guess, then check</summary><p>${esc(i.predict.answer)}</p></details></div>` : ""}
 ${shown}
-<details class="more"${i.problem || i.predict || shown ? "" : " open"}><summary>The explanation, the code and a question</summary><div class="cols">
-<div class="explain"><p class="plain">${esc(i.plain)}${lost(id, k, 0, i.name, i.name)}</p>
+<div class="explain${i.problem || i.predict || shown ? "" : " only"}"><p class="plain">${esc(i.plain)}${lost(id, k, 0, i.name, i.name)}</p>
 ${ladder(id, k, i)}</div>
+<details class="more"><summary>The code and a question</summary><div class="cols">
 <div class="here"><p><span class="tag">In this code</span> ${esc(i.here)}</p>
 ${i.snippet ? (i.annotations ? annotated(i.annotations, i.file) : `<figure class="code"><figcaption>${esc(i.file)}</figcaption><pre>${esc(i.snippet)}</pre></figure>`) : ""}</div>
 <div class="ask"><p><mark>${esc(i.question)}</mark></p>${i.answer ? `<details><summary>Say your answer first, then check</summary><p>${esc(i.answer)}</p></details>` : ""}</div>
@@ -282,7 +290,7 @@ ${e.ideas.map((x, k) => idea(x, k, e.id)).join("\n")}
 </head>
 <body>
 <div class="app">
-<header class="bar"><b>ktrace notebook</b><span>${count(sections.length, "project")} · ${count(n, "page")}</span>${again.count ? `<a class="duelink" href="#review">${again.count} due today</a>` : ""}<button id="mode" type="button" hidden>Night</button></header>
+<header class="bar"><b>ktrace notebook</b><span>${count(sections.length, "project")} · ${count(n, "page")}</span>${again.count ? `<a class="duelink" href="#review">${again.count} due today</a>` : ""}<button id="detail" type="button" hidden>Detail</button><button id="mode" type="button" hidden>Night</button></header>
 <nav class="sections" aria-label="Projects"><p class="pane-title">Projects</p>
 ${tabs}
 </nav>

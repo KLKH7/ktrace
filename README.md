@@ -34,9 +34,10 @@ here" link. Click it and, at the end of its next turn, the agent explains only t
 one level further back, on the same page. For this the notebook is served from your own machine
 (`127.0.0.1`, nowhere else); opened as a file, the link copies the question for you to paste.
 
-**It shows little at a time.** An entry opens on its first idea only, and an idea shows only
-its problem, a prediction and its picture; the explanation, code and question are folded under
-one line. Older entries on a page are one line each until opened.
+**You choose how much is on screen.** A Detail button cycles Brief, Normal and Full, and
+remembers. Normal shows each idea's problem, a prediction, its picture and a short explanation,
+with the code and closing question folded under one line; Brief shows one idea and no
+explanation; Full opens everything. Older entries on a page are one line each until opened.
 
 **Questions come back.** A "Due today" page lists a few questions from earlier entries: each
 idea a day after it was explained, and again whenever it has had time to fade. Answer out loud,
